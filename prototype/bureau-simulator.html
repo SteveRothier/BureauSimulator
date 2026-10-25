@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bureau Simulator : le travail ne finit jamais</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#d5dade;--panel:#eef0ee;--ink:#1b2a38;--mut:#5a6a78;--line:#b7c0c7;--acc:#d9a826;--accd:#a37d12;--accink:#2a1f00;--bad:#b3362b;--ok:#2d7a57;--bar:#c9d1d7;--btn:#1b2a38;--btnink:#f4f6f5;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10171d;--panel:#1a242d;--ink:#e3e9ee;--mut:#93a3b0;--line:#34444f;--acc:#d9a826;--accd:#8a6a10;--accink:#241a00;--bad:#e0675c;--ok:#5cc08f;--bar:#2a3946;--btn:#e3e9ee;--btnink:#10171d}}
+:root[data-theme="dark"]{--bg:#10171d;--panel:#1a242d;--ink:#e3e9ee;--mut:#93a3b0;--line:#34444f;--acc:#d9a826;--accd:#8a6a10;--accink:#241a00;--bad:#e0675c;--ok:#5cc08f;--bar:#2a3946;--btn:#e3e9ee;--btnink:#10171d}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 'IBM Plex Sans',system-ui,sans-serif;font-variant-numeric:tabular-nums}
+.wrap{max-width:1240px;margin:0 auto;padding:12px;display:grid;gap:0 12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));align-items:start}
+[hidden]{display:none!important}
+.card{animation:in .6s}@keyframes in{from{opacity:0;transform:translateY(-6px)}}
+header{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px 22px;align-items:flex-end;margin-bottom:12px}
+h1{font-size:22px;margin:0;font-weight:700;line-height:1.1}
+.rank{color:var(--mut);font-size:13px}
+.stats{display:flex;flex-wrap:wrap;gap:8px 18px;margin-left:auto}
+.st b{display:block;font-size:19px;line-height:1.2}.st span{font-size:12px;color:var(--mut)}
+.bar{height:5px;background:var(--bar);border-radius:3px;overflow:hidden;margin-top:3px;min-width:70px}.bar i{display:block;height:100%;background:var(--ok)}
+.bar.bad i{background:var(--bad)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px;margin-bottom:12px}
+h2{font-size:15px;margin:0 0 8px}
+.desk{text-align:center;padding-top:18px}
+.pile{height:var(--h,6px);margin:0 auto;width:72%;background:repeating-linear-gradient(var(--acc) 0 6px,var(--accd) 6px 7px);border-radius:4px 4px 0 0;transition:height .3s}
+#go{display:block;width:72%;margin:0 auto;padding:22px 10px;font:700 18px 'IBM Plex Sans',system-ui,sans-serif;background:var(--acc);color:var(--accink);border:0;border-radius:0 0 6px 6px;cursor:pointer;box-shadow:0 4px 0 var(--accd)}
+#go:active{transform:translateY(3px);box-shadow:0 1px 0 var(--accd)}
+.sub{color:var(--mut);font-size:13px;margin-top:10px}
+.tick{min-height:2.9em;color:var(--mut);font-size:13px;font-style:italic}
+button{font:inherit}
+button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.b{background:var(--btn);color:var(--btnink);border:0;border-radius:4px;padding:6px 12px;cursor:pointer;font-weight:500}
+.b:disabled{opacity:.45;cursor:not-allowed}
+.b.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.tabs{display:flex;gap:6px;margin-bottom:6px}
+.tabs .b{flex:1}.tabs .on{background:var(--acc);color:var(--accink)}
+.row{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:9px 0;border-top:1px solid var(--line);align-items:center}
+.row small{display:block;color:var(--mut);font-size:12.5px}
+.row .x{color:var(--bad)}
+.g{padding:7px 0;border-top:1px solid var(--line);font-size:14px}
+.g.big{border-left:4px solid var(--acc);padding-left:8px}
+.g.ok{color:var(--ok)}
+.g .m{display:flex;justify-content:space-between;gap:8px}
+.ev h3{margin:0 0 4px;font-size:16px}
+.ev .b{display:block;width:100%;text-align:left;margin-top:6px}
+.log p{margin:0;padding:4px 0;border-top:1px solid var(--line);font-size:13px}
+textarea{width:100%;height:60px;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:4px;font:12px monospace;margin-top:8px}
+.btns{display:flex;flex-wrap:wrap;gap:6px}
+@media(prefers-reduced-motion:reduce){#go:active{transform:none}.pile{transition:none}.card{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+ <div><h1>Bureau Simulator</h1><div class="rank" id="rank"></div></div>
+ <div class="stats" id="stats"></div>
+</header>
+
+<section id="left">
+ <div class="card desk">
+  <div class="pile" id="pile"></div>
+  <button id="go">Traiter un dossier</button>
+  <div class="sub" id="sub"></div>
+ </div>
+ <div class="card" id="tickc" hidden><div class="tick" id="tick"></div></div>
+ <div class="card" id="goals" hidden></div>
+</section>
+
+<section id="mid" hidden>
+ <div class="card">
+  <div class="tabs" id="tabs"></div>
+  <div id="shop"></div>
+ </div>
+</section>
+
+<section id="right" hidden>
+ <div class="card ev" id="ev" hidden></div>
+ <div class="card log" id="logc" hidden><h2>Journal</h2><div id="log"></div></div>
+ <div class="card" id="prest" hidden></div>
+ <div class="card" id="savec" hidden>
+  <h2>Sauvegarde</h2>
+  <div class="btns">
+   <button class="b ghost" data-a="save">Sauvegarder</button>
+   <button class="b ghost" data-a="exp">Exporter</button>
+   <button class="b ghost" data-a="imp">Importer</button>
+   <button class="b ghost" data-a="reset" id="rs">Remise à zéro</button>
+  </div>
+  <textarea id="io" placeholder="Collez ici une sauvegarde à importer" aria-label="Sauvegarde JSON"></textarea>
+  <div class="sub">Sauvegarde automatique toutes les 10 secondes. Hors ligne : jusqu’à 8 h de production.</div>
+ </div>
+</section>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const F=n=>{if(!isFinite(n))return'∞';const a=Math.abs(n);if(a<1000)return(a<10?n.toFixed(1):''+Math.floor(n)).replace('.',',');if(a>=1e18)return n.toExponential(2).replace('e+','e');const u=['','K','M','Md','Bn','Bd'],i=Math.floor(Math.log10(a)/3),v=n/Math.pow(1000,i);return v.toFixed(v<10?2:v<100?1:0).replace('.',',')+u[i]};
+const E=n=>F(n)+' €';
+
+/* ---------- DONNÉES ---------- */
+const EMP=[
+ {id:'intern',n:'Stagiaire',c:40,f:1.15,p:.5,s:.1,era:0,d:'Traite des dossiers tout seul.',x:'Besoin de formation.'},
+ {id:'clerk',n:'Employé administratif',c:200,f:1.15,p:4,s:1.2,era:1,d:'Production fiable.',x:'Pauses et fatigue.'},
+ {id:'spec',n:'Spécialiste',c:2500,f:1.17,p:25,s:8,era:1,d:'Dossiers complexes.',x:'Réclame des formations.'},
+ {id:'tech',n:'Technicien informatique',c:15000,f:1.17,p:90,s:30,era:1,d:'Traite les tickets… et en crée.',x:'Ticket de support du support.'},
+ {id:'lead',n:'Chef d’équipe',c:80000,f:1.17,p:400,s:150,era:2,d:'Fait tourner une équipe.',x:'Génère des réunions.'},
+ {id:'bot',n:'Robot administratif',c:600000,f:1.17,p:2500,s:900,era:3,d:'Traitement continu.',x:'Erreurs automatisées à grande échelle.'}];
+const BLD=[
+ {id:'desk',n:'Bureau individuel',c:250,f:1.18,p:3,r:.3,era:0,d:'Un coin de table avec vue sur un mur.',x:'Loyer.'},
+ {id:'print',n:'Imprimante de bureau',c:1200,f:1.18,p:12,r:1,era:1,d:'Accélère les dossiers physiques.',x:'Bourrage garanti.'},
+ {id:'meet',n:'Salle de réunion',c:15000,f:1.18,p:60,r:8,era:2,d:'Les objectifs d’équipe y prennent forme.',x:'Chaos +1 par salle.',ch:1},
+ {id:'it',n:'Service informatique',c:120000,f:1.18,p:300,r:40,era:2,d:'Stabilise le système.',x:'Chaos −3 par service.',ch:-3},
+ {id:'server',n:'Salle des serveurs',c:1500000,f:1.18,p:4000,r:600,era:3,d:'Les logiciels vont plus vite.',x:'Chaleur : chaos +1.',ch:1}];
+const UPG=[
+ {id:'mouse',n:'Souris ergonomique',c:50,era:0,d:'Clic +1',e:{cl:1}},
+ {id:'chair',n:'Chaise ergonomique',c:120,era:0,d:'Moral +8',x:'Le bon de commande fait 3 pages.',e:{mo:8}},
+ {id:'pad',n:'Tapis de souris premium',c:150,era:0,d:'Clic +25 %',e:{cm:1.25}},
+ {id:'coffee',n:'Machine à café',c:250,era:0,d:'Moral +6',x:'Pannes possibles.',e:{mo:6}},
+ {id:'kb',n:'Clavier mécanique',c:400,era:0,d:'Clic ×1,5',x:'Très bruyant.',e:{cm:1.5}},
+ {id:'tpl',n:'Modèles de documents',c:500,era:0,d:'Production +15 %',e:{pm:1.15}},
+ {id:'train',n:'Formation accélérée',c:2000,era:1,d:'Production +25 %',e:{pm:1.25}},
+ {id:'dual',n:'Double écran',c:2500,era:1,d:'Clic ×2, production +10 %',e:{cm:2,pm:1.1}},
+ {id:'bill',n:'Facturation automatique',c:4000,era:1,d:'Revenus +20 %',x:'Génère des factures de facturation.',e:{rm:1.2}},
+ {id:'prev',n:'Maintenance préventive',c:8000,era:1,d:'Événements négatifs −20 %',e:{er:.2}},
+ {id:'break',n:'Salle de pause',c:12000,era:1,d:'Moral +10',x:'Demandes de salle de réunion.',e:{mo:10}},
+ {id:'smart',n:'Objectifs SMART',c:40000,era:2,d:'Production +30 %',x:'Dossiers entrants +10 %.',e:{pm:1.3,im:1.1}},
+ {id:'dash',n:'Tableaux de bord',c:90000,era:2,d:'Production +20 %',x:'Chaos +3.',e:{pm:1.2,ch:3}},
+ {id:'cc',n:'Comité du comité',c:300000,era:3,d:'Production +15 %, événements négatifs −10 %',x:'Chaos +5.',e:{pm:1.15,er:.1,ch:5}},
+ {id:'ai',n:'Optimisation par IA',c:500000,era:3,d:'Production ×2',x:'Dossiers entrants +25 %. Supervision requise.',e:{pm:2,im:1.25}}];
+const win=(s,n)=>s.win.slice(-n).reduce((a,b)=>a+b,0)+s.winAcc;
+const nEmp=s=>Object.values(s.emp).reduce((a,b)=>a+b,0);
+const ERAS=[
+ {rank:'Stagiaire',g:[
+  {id:'a1',l:'Traiter 100 dossiers',v:s=>s.docs,t:100},
+  {id:'a2',l:'Gagner 500 €',v:s=>s.earned,t:500,m:1},
+  {id:'a3',l:'Acheter 3 améliorations',v:s=>Object.keys(s.upg).length,t:3},
+  {id:'a4',l:'Atteindre 2 dossiers par seconde',v:s=>s.rate,t:2},
+  {id:'a5',l:'Embaucher un stagiaire',v:s=>s.emp.intern||0,t:1},
+  {id:'a6',big:1,l:'Traiter 400 dossiers en 60 secondes',v:s=>win(s,60),t:400}]},
+ {rank:'Employé confirmé',g:[
+  {id:'b1',l:'Employer 10 personnes',v:nEmp,t:10},
+  {id:'b2',l:'Atteindre 25 dossiers par seconde',v:s=>s.rate,t:25},
+  {id:'b3',l:'Moral d’au moins 50 pendant 60 s',v:s=>s.morale,t:50,h:60},
+  {id:'b4',l:'Traiter 10 000 dossiers au total',v:s=>s.docs,t:10000},
+  {id:'b5',big:1,l:'Tenir 60 dossiers par seconde pendant 30 s',v:s=>s.rate,t:60,h:30}]},
+ {rank:'Chef d’équipe',g:[
+  {id:'c1',l:'Gérer 3 chefs d’équipe',v:s=>s.emp.lead||0,t:3},
+  {id:'c2',l:'Employer 30 personnes',v:nEmp,t:30},
+  {id:'c3',l:'Atteindre 250 dossiers par seconde',v:s=>s.rate,t:250},
+  {id:'c4',l:'Satisfaction client d’au moins 60',v:s=>s.sat,t:60},
+  {id:'c5',big:1,l:'20 000 dossiers en 2 minutes, satisfaction 70',v:s=>s.sat>=70?win(s,120):0,t:20000}]},
+ {rank:'Manager intermédiaire',g:[
+  {id:'d1',l:'Employer 100 personnes',v:nEmp,t:100},
+  {id:'d2',l:'Atteindre 2 500 dossiers par seconde',v:s=>s.rate,t:2500},
+  {id:'d3',l:'Chaos sous 50 pendant 60 s',v:s=>s.chaos<50?1:0,t:1,h:60},
+  {id:'d4',big:1,l:'120 employés avec un chaos sous 50 pendant 90 s',v:s=>nEmp(s)>=120&&s.chaos<50?1:0,t:1,h:90}]},
+ {rank:'Directeur',g:[]}];
+
+/* ---------- ÉVÉNEMENTS (index 0 = choix actif, dernier = choix par défaut) ---------- */
+const K=(k,sec,min)=>Math.max(min,k*sec);
+const pay=(k,sec,min)=>{const x=Math.min(S.money,K(k,sec,min));S.money-=x;return x};
+const EV=[
+ {id:'bsod',era:0,neg:1,n:'Écran bleu',d:'L’ordinateur affiche un message très calme à propos d’une erreur très grave.',ch:[
+  {l:k=>'Appeler le support ('+E(K(k,30,20))+')',f:k=>'Support payé : '+E(pay(k,30,20))+'. Le problème était le câble.'},
+  {l:()=>'Attendre 15 secondes',f:()=>{S.fx={m:.3,t:15};return'Production ralentie quelques secondes.'}}]},
+ {id:'jam',era:0,neg:1,n:'Bourrage papier',d:'L’imprimante s’est arrêtée au milieu d’une phrase.',ch:[
+  {l:k=>'Réparer ('+E(K(k,20,10))+')',f:k=>'Réparée pour '+E(pay(k,20,10))+'.'},
+  {l:()=>'Traiter à la main (+40 dossiers)',f:()=>{S.pend+=40;return'40 dossiers à retraiter à la main.'}}]},
+ {id:'form',era:0,neg:1,n:'Le mauvais formulaire',d:'Le formulaire était correct. Il n’était simplement pas le bon formulaire.',ch:[
+  {l:()=>'Tout refaire (+30 dossiers)',f:()=>{S.pend+=30;return'Trente dossiers de plus. Le bon formulaire existe peut-être.'}}]},
+ {id:'bonus',era:0,n:'Prime exceptionnelle',d:'La direction a retrouvé un budget. Personne ne sait lequel.',ch:[
+  {l:k=>'Encaisser '+E(K(k,60,50)),f:k=>{const x=K(k,60,50);S.money+=x;S.earned+=x;S.life+=x;return'Prime reçue : '+E(x)+'.'}}]},
+ {id:'coffee',era:1,neg:1,n:'Machine à café en panne',d:'Le moral est en train de refroidir.',ch:[
+  {l:k=>'Réparer ('+E(K(k,40,30))+')',f:k=>'Café rétabli pour '+E(pay(k,40,30))+'.'},
+  {l:()=>'Accepter la situation',f:()=>{S.morale=Math.max(0,S.morale-12);return'Moral −12. Un thé circule.'}}]},
+ {id:'idea',era:1,n:'Idée absurde mais efficace',d:'Un employé propose quelque chose d’étrange. Cela fonctionne.',ch:[
+  {l:()=>'Bureaux debout : production ×2 pendant 20 s',f:()=>{S.fx={m:2,t:20};return'Tout le monde est debout. Ça va vite.'}},
+  {l:k=>'Cagnotte du service : '+E(K(k,120,100)),f:k=>{const x=K(k,120,100);S.money+=x;S.earned+=x;S.life+=x;return'Cagnotte récupérée : '+E(x)+'.'}},
+  {l:()=>'Journée sans réunion : chaos −15',f:()=>{S.chaos=Math.max(0,S.chaos-15);return'Le chaos a pris sa journée aussi.'}}]},
+ {id:'strike',era:1,neg:1,w:s=>s.morale<40?4:0,n:'Grève',d:'Le moral est bas et la charge élevée. Les stylos sont posés.',ch:[
+  {l:k=>'Négocier ('+E(K(k,90,100))+', moral +25)',f:k=>{const x=pay(k,90,100);S.morale=Math.min(100,S.morale+25);return'Accord signé pour '+E(x)+'.'}},
+  {l:()=>'Attendre 25 secondes',f:()=>{S.fx={m:.4,t:25};return'Le mouvement dure. La production aussi, à 40 %.'}}]},
+ {id:'client',era:2,neg:1,n:'Client mécontent',d:'Un client écrit en majuscules. Il a le droit.',ch:[
+  {l:k=>'Rembourser ('+E(K(k,30,50))+', satisfaction +8)',f:k=>{const x=pay(k,30,50);S.sat=Math.min(100,S.sat+8);return'Remboursé : '+E(x)+'.'}},
+  {l:()=>'Ignorer (satisfaction −10)',f:()=>{S.sat=Math.max(0,S.sat-10);return'Le client a changé de ton. Pas dans le bon sens.'}}]},
+ {id:'audit',era:2,neg:1,n:'Audit surprise',d:'Un auditeur est arrivé avec une liste de vérification. La liste a une liste.',ch:[
+  {l:k=>'Préparation express ('+E(K(k,60,100))+')',f:k=>'Audit réussi. Facture : '+E(pay(k,60,100))+'.'},
+  {l:()=>'Prendre le risque (50 % d’amende)',f:k=>{if(Math.random()<.5){const x=pay(k,150,200);return'Amende : '+E(x)+'.'}S.chaos=Math.max(0,S.chaos-8);return'Audit réussi sans préparation. Suspect, mais valide.'}}]},
+ {id:'late',era:2,neg:1,w:(s,ov)=>ov>.7?4:0,n:'Retards généralisés',d:'La file de dossiers a sa propre salle d’attente.',ch:[
+  {l:k=>'Heures supplémentaires ('+E(K(k,60,100))+', file −50 %)',f:k=>{const x=pay(k,60,100);S.pend*=.5;S.morale=Math.max(0,S.morale-8);return'File réduite pour '+E(x)+'. Moral −8.'}},
+  {l:()=>'Attendre (chaos +10)',f:()=>{S.chaos=Math.min(100,S.chaos+10);return'La file attend. Le chaos aussi.'}}]},
+ {id:'absurd',era:2,n:'Contrat absurde',d:'Un client veut des milliers de rapports inutiles, payés étonnamment cher.',ch:[
+  {l:k=>'Accepter (+'+E(K(k,180,200))+', +dossiers, chaos +8)',f:k=>{const x=K(k,180,200);S.money+=x;S.earned+=x;S.life+=x;S.pend+=K(k,60,50);S.chaos=Math.min(100,S.chaos+8);return'Contrat signé : '+E(x)+'. Les rapports arrivent.'}},
+  {l:()=>'Refuser poliment',f:()=>'Refusé. Le client a demandé un rapport sur le refus.'}]}
+];
+const LINES=[[s=>s.docs<5,'Un dossier. Puis un autre. La carrière commence.'],[s=>s.pend>200,'La pile de dossiers a désormais un code postal.'],[s=>s.chaos>50,'Le chaos a demandé une réunion pour parler du chaos.'],[s=>s.era>=1&&s.morale<40,'Un sondage sur le bonheur est en cours. Il dure 45 minutes.'],[s=>Object.keys(s.upg).length>5,'Chaque amélioration a créé un formulaire de suivi.'],[s=>s.era>=1,'Vous avez été promu. Votre bureau n’a pas changé.'],[s=>s.era>=2,'Cette réunion aurait pu être un e-mail. L’e-mail aussi.'],[()=>1,'Le travail ne finit jamais. Il se déplace.'],[()=>1,'Un indicateur est au vert. On cherche pourquoi.'],[()=>1,'Votre efficacité a été remarquée. Voici plus de travail.']];
+
+/* ---------- ÉTAT ---------- */
+const def=()=>({v:1,t:Date.now(),era:0,money:0,pend:5,docs:0,earned:0,life:0,emp:{},bld:{},upg:{},morale:70,chaos:0,sat:90,rate:0,clickAcc:0,winAcc:0,sec:0,win:Array(120).fill(0),done:{},hold:{},prest:{n:0,pts:0},fx:null,ev:null,evNext:120,log:[],clicks:0,seen:{},ui:{}});
+let S=def(),tab='emp',tickTxt='',pending=null;
+const KEY='bureau_sim_v1';
+function load(){try{const r=localStorage.getItem(KEY);if(r){const o=JSON.parse(r);if(o&&o.v===1&&Array.isArray(o.win))S=Object.assign(def(),o)}}catch(e){}}
+function save(){try{S.t=Date.now();localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+const log=m=>{S.log.unshift(m);S.log.length=Math.min(S.log.length,8)};
+
+/* ---------- MOTEUR ---------- */
+function calc(s){let pm=1,cm=1,rm=1,im=1,mo=0,ch=0,er=0,cl=1;
+ for(const u of UPG)if(s.upg[u.id]){const e=u.e;pm*=e.pm||1;cm*=e.cm||1;rm*=e.rm||1;im*=e.im||1;mo+=e.mo||0;ch+=e.ch||0;er+=e.er||0;cl+=e.cl||0}
+ let base=0,exp=0;
+ for(const x of EMP){const n=s.emp[x.id]||0;base+=x.p*n;exp+=x.s*n}
+ for(const x of BLD){const n=s.bld[x.id]||0;base+=x.p*n;exp+=x.r*n;ch+=(x.ch||0)*n}
+ const pr=1+.1*s.prest.pts,mf=.7+.4*s.morale/100,cf=s.chaos>75?.65:s.chaos>50?.85:1,fx=s.fx?s.fx.m:1,prod=base*pm*pr*mf*cf*fx;
+ return{prod,click:cl*cm*pr*mf,incoming:(1+.9*prod)*im,exp,val:rm*(.6+.4*s.sat/100),mo,ch,er}}
+const cost=(x,n)=>Math.ceil(x.c*Math.pow(x.f||1,n));
+
+function tick(s,dt,off){
+ const c=calc(s),inc=c.incoming*dt,avail=s.pend+inc,proc=Math.min(c.prod*dt,avail);
+ s.pend=avail-proc;const g=proc*c.val;
+ s.money=Math.max(0,s.money+g-c.exp*dt);s.earned+=g;s.life+=g;s.docs+=proc;s.winAcc+=proc;
+ s.rate+=((proc+s.clickAcc)/dt-s.rate)*(1-Math.exp(-dt*.5));s.clickAcc=0;
+ const ov=s.pend/(c.prod*30+300),k=1-Math.exp(-dt*.1),oc=Math.min(1,ov);
+ s.morale+=((s.era>=1?50+c.mo-20*oc:70)-s.morale)*k;
+ if(s.era>=2){s.chaos+=(Math.min(100,Math.max(0,c.ch)+60*oc+(s.morale<40?10:0))-s.chaos)*k;
+  s.sat+=(Math.max(0,92-45*oc-Math.max(0,s.chaos-25)*.4)-s.sat)*k}
+ s.morale=Math.min(100,Math.max(0,s.morale));s.chaos=Math.min(100,Math.max(0,s.chaos));s.sat=Math.min(100,Math.max(0,s.sat));
+ if(s.fx&&(s.fx.t-=dt)<=0)s.fx=null;
+ s.sec+=dt;while(s.sec>=1){s.win.push(s.winAcc);s.win.shift();s.winAcc=0;s.sec-=1}
+ if(s.era<4){let all=true;
+  for(const g of ERAS[s.era].g){if(s.done[g.id])continue;const ok=g.v(s,c)>=g.t;
+   if(g.h){s.hold[g.id]=ok?(s.hold[g.id]||0)+dt:0;if(s.hold[g.id]>=g.h)s.done[g.id]=1}else if(ok)s.done[g.id]=1;
+   if(!s.done[g.id])all=false}
+  if(all){s.era++;log('Promotion : '+ERAS[s.era].rank+'. Nouveaux postes et nouveaux problèmes.');tickTxt='Promotion obtenue : '+ERAS[s.era].rank+'.'}}
+ if(!off){
+  if(s.ev){if((s.ev.ttl-=dt)<=0){const e=EV.find(x=>x.id===s.ev.id);resolve(e.ch.length-1,true)}}
+  else if((s.evNext-=dt)<=0)pickEv(c,ov)}}
+
+function pickEv(c,ov){const cand=EV.map(e=>[e,(S.era>=e.era?(e.w?e.w(S,ov):1):0)*(e.neg?Math.max(.3,1-c.er):1)]).filter(x=>x[1]>0);
+ if(!cand.length){S.evNext=20;return}
+ let r=Math.random()*cand.reduce((a,x)=>a+x[1],0);
+ for(const[e,w]of cand)if((r-=w)<=0){S.ev={id:e.id,ttl:60,k:c.prod*c.val};S.ui.ev=1;return}}
+function resolve(i,auto){const e=EV.find(x=>x.id===S.ev.id);if(!e)return;const m=e.ch[i].f(S.ev.k);log(e.n+' : '+m+(auto?' (sans décision)':''));S.ev=null;S.evNext=80+Math.random()*60;save()}
+
+function sim(elapsed){const st=Math.min(600,Math.max(1,Math.ceil(elapsed))),dt=elapsed/st;for(let i=0;i<st;i++)tick(S,dt,true)}
+function click(){const c=calc(S),p=c.click;S.pend-=Math.min(S.pend,p);S.clickAcc+=p;S.docs+=p;const g=p*c.val;S.money+=g;S.earned+=g;S.life+=g;S.winAcc+=p;S.clicks++}
+function buy(kind,id){const L=kind==='emp'?EMP:kind==='bld'?BLD:UPG,x=L.find(y=>y.id===id);if(!x)return;
+ if(kind==='upg'){if(S.upg[id]||S.money<x.c)return;S.money-=x.c;S.upg[id]=1}
+ else{const m=kind==='emp'?S.emp:S.bld,n=m[id]||0,p=cost(x,n);if(S.money<p)return;S.money-=p;m[id]=n+1}
+ render(true)}
+const prestGain=()=>Math.max(0,Math.floor(Math.sqrt(S.life/2e4))-S.prest.pts);
+
+/* ---------- INTERFACE ---------- */
+const cache={};const put=(id,h)=>{if(cache[id]!==h){cache[id]=h;$(id).innerHTML=h}};
+const meter=(v,bad)=>'<div class="bar'+(bad?' bad':'')+'"><i style="width:'+Math.max(0,Math.min(100,v))+'%"></i></div>';
+/* Révélation progressive de l’interface */
+const U=(k,cond,msg)=>{if(!S.ui[k]&&cond){S.ui[k]=1;if(msg)log(msg)}};
+const vis=(id,b)=>{const e=$(id);if(e.hidden===b)e.hidden=!b};
+function reveal(){
+ for(const[L,m]of[[EMP,S.emp],[BLD,S.bld]])for(const x of L)if(S.era>=x.era&&(m[x.id]||S.money>=x.c*.6))S.seen[x.id]=1;
+ for(const u of UPG)if(S.era>=u.era&&(S.upg[u.id]||S.money>=u.c*.6))S.seen[u.id]=1;
+ const any=L=>L.some(x=>S.seen[x.id]),had=S.ui.shop;
+ U('shop',any(UPG)||any(EMP)||any(BLD),'Boutique ouverte : vos gains peuvent enfin être dépensés.');
+ U('upg',any(UPG),had&&'Nouvel onglet : Améliorations.');
+ U('emp',any(EMP),had&&'Nouvel onglet : Employés. Quelqu’un d’autre peut cliquer à votre place.');
+ U('bld',any(BLD),had&&'Nouvel onglet : Bâtiments. Les dossiers ont besoin de murs.');
+ U('goals',S.docs>=10,'Votre responsable a défini des objectifs. Vous n’avez pas été consulté.');
+ U('save',S.docs>=30);
+ if(!S.ui[tab])tab=['emp','bld','upg'].find(t=>S.ui[t])||tab;
+ vis('tickc',S.docs>=1);vis('goals',!!S.ui.goals);vis('mid',!!S.ui.shop);
+ vis('ev',!!S.ui.ev);vis('logc',S.log.length>0);vis('prest',S.era>=3);vis('savec',!!S.ui.save);
+ vis('right',!!(S.ui.ev||S.log.length||S.era>=3||S.ui.save));
+}
+function render(){
+ const c=calc(S),net=S.rate*c.val-c.exp;reveal();
+ $('rank').textContent=S.ui.goals?'Rang : '+ERAS[S.era].rank+(S.prest.pts?' · Restructurations : '+S.prest.n:''):'Poste : stagiaire (à l’essai)';
+ let st='<div class="st"><b>'+F(Math.floor(S.docs))+'</b><span>Dossiers traités</span></div>';
+ if(S.earned>0)st+='<div class="st"><b>'+E(S.money)+'</b><span>Argent</span></div>';
+ if(S.docs>=3)st+='<div class="st"><b>'+F(S.pend)+'</b><span>Dossiers en attente</span></div>';
+ if(S.docs>=20)st+='<div class="st"><b>'+F(S.rate)+'/s</b><span>Débit</span></div>';
+ if(nEmp(S)||Object.keys(S.bld).length)st+='<div class="st"><b>'+(net<0?'−':'+')+E(Math.abs(net))+'/s</b><span>Revenu net</span></div>';
+ if(S.era>=1)st+='<div class="st"><b>'+Math.round(S.morale)+'</b><span>Moral</span>'+meter(S.morale)+'</div>';
+ if(S.era>=2)st+='<div class="st"><b>'+Math.round(S.sat)+'</b><span>Satisfaction</span>'+meter(S.sat)+'</div><div class="st"><b>'+Math.round(S.chaos)+'</b><span>Chaos</span>'+meter(S.chaos,1)+'</div>';
+ put('stats',st);
+ $('pile').style.setProperty('--h',Math.min(150,4+14*Math.log2(S.pend+1))+'px');
+ $('sub').textContent=S.docs<1?'':'+'+F(c.click)+' dossier'+(c.click>=2?'s':'')+' par clic · '+F(c.val)+' € par dossier'+(S.fx?' · effet temporaire actif':'');
+ put('tick',tickTxt);
+ // objectifs
+ let gh='<h2>Objectifs de l’ère : '+ERAS[S.era].rank+'</h2>';
+ if(S.era>=4)gh+='<p>Rang atteint : Directeur. C’est la fin du prototype. Contrats, filiales et ères 6 à 10 arrivent dans les prochaines versions. Vous pouvez déjà restructurer.</p>';
+ else for(const g of ERAS[S.era].g){const d=S.done[g.id],v=g.v(S,c),h=g.h?Math.min(g.h,S.hold[g.id]||0):0,p=d?1:g.h?Math.max(h/g.h,0):Math.min(1,v/g.t);
+  gh+='<div class="g'+(g.big?' big':'')+(d?' ok':'')+'"><div class="m"><span>'+(g.big?'<b>Objectif irréaliste</b> : ':'')+g.l+'</span><span>'+(d?'Fait':g.h?Math.floor(h)+'/'+g.h+' s':F(Math.min(v,g.t))+' / '+F(g.t))+'</span></div>'+meter(p*100)+'</div>'}
+ put('goals',gh);
+ // boutique
+ const T=[['emp','Employés'],['bld','Bâtiments'],['upg','Améliorations']];
+ put('tabs',T.filter(t=>S.ui[t[0]]).map(t=>'<button class="b'+(tab===t[0]?' on':'')+'" data-a="tab" data-i="'+t[0]+'">'+t[1]+'</button>').join(''));
+ let sh='';
+ if(tab==='upg'){const L=UPG.filter(u=>S.seen[u.id]&&!S.upg[u.id]);
+  sh=L.map(u=>'<div class="row"><div><b>'+u.n+'</b><small>'+u.d+'</small>'+(u.x?'<small class="x">Effet secondaire : '+u.x+'</small>':'')+'</div><button class="b" data-a="buy" data-k="upg" data-i="'+u.id+'"'+(S.money<u.c?' disabled':'')+'>'+(S.money<u.c?'Fonds insuffisants<br>':'')+E(u.c)+'</button></div>').join('')||'<p class="sub">Plus d’amélioration disponible pour l’instant. Une promotion en débloque d’autres.</p>'}
+ else{const L=(tab==='emp'?EMP:BLD),m=tab==='emp'?S.emp:S.bld;
+  sh=L.filter(x=>S.seen[x.id]).map(x=>{const n=m[x.id]||0,p=cost(x,n);return'<div class="row"><div><b>'+x.n+'</b> ×'+n+'<small>'+x.d+' +'+F(x.p)+' dossiers/s · coût '+E(x.s!==undefined?x.s:x.r)+'/s</small><small class="x">Effet secondaire : '+x.x+'</small></div><button class="b" data-a="buy" data-k="'+tab+'" data-i="'+x.id+'"'+(S.money<p?' disabled':'')+'>'+(S.money<p?'Fonds insuffisants<br>':'')+E(p)+'</button></div>'}).join('')}
+ put('shop',sh);
+ // événement
+ let eh='<h2>Événements</h2><p class="sub">Aucun incident pour l’instant. Cela ne durera pas.</p>';
+ if(S.ev){const e=EV.find(x=>x.id===S.ev.id);eh='<h3>'+e.n+'</h3><div>'+e.d+'</div>'+e.ch.map((h,i)=>'<button class="b" data-a="ev" data-i="'+i+'">'+h.l(S.ev.k)+'</button>').join('')+'<div class="sub">Sans décision, le dernier choix s’applique au bout d’une minute.</div>'}
+ put('ev',eh);
+ put('log',S.log.map(m=>'<p>'+m+'</p>').join('')||'<p class="sub">Rien à signaler. Pour l’instant.</p>');
+ // prestige
+ const gn=prestGain();
+ put('prest','<h2>Restructuration</h2>'+(S.era<3?'<p class="sub">Prototype : débloquée au rang Manager intermédiaire.</p>':'<p>Recommencez avec un bonus permanent de +10 % de production et de clic par point. Points actuels : '+S.prest.pts+'.</p><button class="b" data-a="prest"'+(gn<1?' disabled':'')+'>Restructurer : +'+gn+' point'+(gn>1?'s':'')+'</button>'+(gn<1?'<div class="sub">Gagnez davantage d’argent au total pour obtenir un point.</div>':'')));
+}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a,i=b.dataset.i;
+ if(a==='tab'){tab=i;render()}
+ else if(a==='buy')buy(b.dataset.k,i);
+ else if(a==='ev'&&S.ev){resolve(+i);render()}
+ else if(a==='save'){save();log('Sauvegarde effectuée.');render()}
+ else if(a==='exp'){save();$('io').value=localStorage.getItem(KEY)||JSON.stringify(S);$('io').select()}
+ else if(a==='imp'){try{const o=JSON.parse($('io').value);if(o&&o.v===1&&Array.isArray(o.win)){S=Object.assign(def(),o);save();log('Sauvegarde importée.');render()}else throw 0}catch(x){log('Import impossible : sauvegarde invalide.');render()}}
+ else if(a==='reset'){if(b.dataset.c){S=def();save();b.dataset.c='';b.textContent='Remise à zéro';render()}else{b.dataset.c=1;b.textContent='Confirmer la remise à zéro'}}
+ else if(a==='prest'){const g=prestGain();if(g>=1){const p={n:S.prest.n+1,pts:S.prest.pts+g},l=S.life,lg=S.log;S=def();S.prest=p;S.life=l;S.log=lg;log('Restructuration : +'+g+' point'+(g>1?'s':'')+'. L’entreprise recommence, en mieux, donc en plus compliqué.');save();render()}}});
+$('go').addEventListener('click',()=>{click();render()});
+
+/* ---------- BOUCLE ---------- */
+load();
+const away=(Date.now()-S.t)/1000;
+if(away>30){const m0=S.money,d0=S.docs;sim(Math.min(away,28800));log('Pendant votre absence ('+(away>3600?(away/3600).toFixed(1).replace('.',',')+' h':Math.round(away/60)+' min')+') : +'+E(S.money-m0)+', '+F(S.docs-d0)+' dossiers traités.')}
+let last=Date.now(),lastSave=last,lastLine=0;
+setInterval(()=>{const n=Date.now(),d=(n-last)/1000;last=n;
+ if(d>2)sim(Math.min(d,28800));else tick(S,Math.max(d,.001),false);
+ if(n-lastLine>9000){lastLine=n;const m=LINES.filter(l=>l[0](S));tickTxt=m[Math.floor(Math.random()*m.length)][1]}
+ if(n-lastSave>10000){lastSave=n;save()}
+ render()},250);
+addEventListener('pagehide',save);
+render();
+</script>
+</body>
+</html>
