@@ -1,18 +1,16 @@
-
+// app/page.tsx
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { PointerEvent, ReactNode } from "react";
 import {
   BriefcaseBusiness,
-  Calculator,
   ChartNoAxesCombined,
   Check,
   ChevronRight,
   CircleHelp,
   Coffee,
   FileText,
-  Folder,
-  FolderOpen,
   GraduationCap,
   HardDrive,
   LockKeyhole,
@@ -52,11 +50,24 @@ type AppDefinition = {
   unlockAt: number;
 };
 
-type WindowState = {
+type WindowBounds = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+type WindowState = WindowBounds & {
   id: AppId;
   minimized: boolean;
   zIndex: number;
+  maximized: boolean;
+  restoreBounds?: WindowBounds;
 };
+
+const TASKBAR_HEIGHT = 48;
+const MIN_WINDOW_WIDTH = 300;
+const MIN_WINDOW_HEIGHT = 180;
 
 const APPS: AppDefinition[] = [
   {
@@ -149,7 +160,7 @@ const UPGRADE_LIST = [
   {
     id: "workflow",
     name: "Flux de travail avancé",
-    description: "Améliore également les gains hors ligne.",
+    description: "Améliore aussi les gains hors ligne.",
     cost: 250,
     icon: TrendingUp,
   },
@@ -183,8 +194,6 @@ const UPGRADE_LIST = [
   },
 ] as const;
 
-const MINE_POSITIONS = [3, 11, 19];
-
 function formatMoney(value: number) {
   return new Intl.NumberFormat("fr-FR", {
     style: "currency",
@@ -199,12 +208,51 @@ function formatNumber(value: number) {
   }).format(value);
 }
 
+function getInitialBounds(id: AppId): WindowBounds {
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  const preferredWidth =
+    id === "catalog"
+      ? 760
+      : id === "minesweeper"
+        ? 430
+        : id === "personnel"
+          ? 620
+          : id === "stats"
+            ? 620
+            : id === "help"
+              ? 570
+              : 650;
+
+  const width = Math.max(
+    Math.min(MIN_WINDOW_WIDTH, viewportWidth - 16),
+    Math.min(preferredWidth, viewportWidth - 24),
+  );
+
+  const height = Math.max(
+    Math.min(MIN_WINDOW_HEIGHT, viewportHeight - TASKBAR_HEIGHT - 16),
+    Math.min(620, viewportHeight - TASKBAR_HEIGHT - 24),
+  );
+
+  return {
+    x: Math.max(8, (viewportWidth - width) / 2),
+    y: Math.max(8, (viewportHeight - TASKBAR_HEIGHT - height) / 2),
+    width,
+    height,
+  };
+}
+
 function WindowFrame({
   title,
   icon: Icon,
   onClose,
   onMinimize,
   onFocus,
+  onToggleMaximize,
+  onBoundsChange,
+  bounds,
+  maximized,
   zIndex,
   children,
   className = "",
@@ -214,17 +262,152 @@ function WindowFrame({
   onClose: () => void;
   onMinimize: () => void;
   onFocus: () => void;
+  onToggleMaximize: () => void;
+  onBoundsChange: (bounds: WindowBounds) => void;
+  bounds: WindowBounds;
+  maximized: boolean;
   zIndex: number;
-  children: React.ReactNode;
+  children: ReactNode;
   className?: string;
 }) {
+  const interaction = useRef<{
+    type: "drag" | "resize";
+    edge: string;
+    pointerX: number;
+    pointerY: number;
+    bounds: WindowBounds;
+  } | null>(null);
+
+  const startInteraction = (
+    event: PointerEvent<HTMLElement>,
+    type: "drag" | "resize",
+    edge = "",
+  ) => {
+    if (event.button !== 0 || maximized) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    onFocus();
+
+    interaction.current = {
+      type,
+      edge,
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+      bounds: { ...bounds },
+    };
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const moveInteraction = (event: PointerEvent<HTMLElement>) => {
+    const active = interaction.current;
+    if (!active) return;
+
+    event.preventDefault();
+
+    const dx = event.clientX - active.pointerX;
+    const dy = event.clientY - active.pointerY;
+    const start = active.bounds;
+
+    if (active.type === "drag") {
+      const maxX = Math.max(0, window.innerWidth - 100);
+      const maxY = Math.max(0, window.innerHeight - TASKBAR_HEIGHT - 30);
+
+      onBoundsChange({
+        ...start,
+        x: Math.max(-start.width + 100, Math.min(maxX, start.x + dx)),
+        y: Math.max(0, Math.min(maxY, start.y + dy)),
+      });
+
+      return;
+    }
+
+    let { x, y, width, height } = start;
+    const edge = active.edge;
+
+    if (edge.includes("e")) {
+      width = Math.max(MIN_WINDOW_WIDTH, start.width + dx);
+    }
+
+    if (edge.includes("s")) {
+      height = Math.max(MIN_WINDOW_HEIGHT, start.height + dy);
+    }
+
+    if (edge.includes("w")) {
+      const nextWidth = Math.max(MIN_WINDOW_WIDTH, start.width - dx);
+      x = start.x + start.width - nextWidth;
+      width = nextWidth;
+    }
+
+    if (edge.includes("n")) {
+      const nextHeight = Math.max(MIN_WINDOW_HEIGHT, start.height - dy);
+      y = start.y + start.height - nextHeight;
+      height = nextHeight;
+    }
+
+    const maxWidth = Math.max(MIN_WINDOW_WIDTH, window.innerWidth - x);
+    const maxHeight = Math.max(
+      MIN_WINDOW_HEIGHT,
+      window.innerHeight - TASKBAR_HEIGHT - y,
+    );
+
+    width = Math.min(width, maxWidth);
+    height = Math.min(height, maxHeight);
+
+    onBoundsChange({ x, y, width, height });
+  };
+
+  const endInteraction = (event: PointerEvent<HTMLElement>) => {
+    interaction.current = null;
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const resizeHandles = [
+    ["n", "resize-n"],
+    ["s", "resize-s"],
+    ["e", "resize-e"],
+    ["w", "resize-w"],
+    ["ne", "resize-ne"],
+    ["nw", "resize-nw"],
+    ["se", "resize-se"],
+    ["sw", "resize-sw"],
+  ];
+
   return (
     <section
-      className={`window ${className}`}
-      style={{ zIndex }}
+      className={`window ${className} ${maximized ? "window-maximized" : ""}`}
+      style={{
+        zIndex,
+        left: bounds.x,
+        top: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+        maxWidth: "none",
+        maxHeight: "none",
+        transform: "none",
+      }}
       onMouseDown={onFocus}
     >
-      <header className="window-titlebar">
+      <header
+        className="window-titlebar"
+        onPointerDown={(event) => {
+          const target = event.target as HTMLElement;
+          if (target.closest("button")) return;
+          startInteraction(event, "drag");
+        }}
+        onPointerMove={moveInteraction}
+        onPointerUp={endInteraction}
+        onPointerCancel={endInteraction}
+        onDoubleClick={(event) => {
+          const target = event.target as HTMLElement;
+          if (!target.closest("button")) onToggleMaximize();
+        }}
+        title="Glisser pour déplacer · Double-cliquer pour agrandir"
+      >
         <div className="window-title">
           <Icon size={16} />
           <span>{title}</span>
@@ -240,6 +423,13 @@ function WindowFrame({
           </button>
           <button
             className="window-control"
+            aria-label={maximized ? "Restaurer" : "Agrandir"}
+            onClick={onToggleMaximize}
+          >
+            {maximized ? <Minimize2 size={13} /> : <Square size={12} />}
+          </button>
+          <button
+            className="window-control"
             aria-label="Fermer"
             onClick={onClose}
           >
@@ -249,6 +439,20 @@ function WindowFrame({
       </header>
 
       <div className="window-content">{children}</div>
+
+      {!maximized &&
+        resizeHandles.map(([edge, handleClass]) => (
+          <div
+            key={edge}
+            className={`window-resize-handle ${handleClass}`}
+            onPointerDown={(event) =>
+              startInteraction(event, "resize", edge)
+            }
+            onPointerMove={moveInteraction}
+            onPointerUp={endInteraction}
+            onPointerCancel={endInteraction}
+          />
+        ))}
     </section>
   );
 }
@@ -283,11 +487,55 @@ export default function HomePage() {
     };
 
     updateClock();
-
     const interval = window.setInterval(updateClock, 1000);
+
     return () => window.clearInterval(interval);
-    // Hydrate once when the app starts.
+    // Hydrate once at application startup.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setWindows((current) =>
+        current.map((item) => {
+          if (item.maximized) {
+            return {
+              ...item,
+              x: 0,
+              y: 0,
+              width: window.innerWidth,
+              height: window.innerHeight - TASKBAR_HEIGHT,
+            };
+          }
+
+          const width = Math.min(item.width, window.innerWidth);
+          const height = Math.min(
+            item.height,
+            Math.max(MIN_WINDOW_HEIGHT, window.innerHeight - TASKBAR_HEIGHT),
+          );
+
+          return {
+            ...item,
+            width,
+            height,
+            x: Math.max(
+              -width + 100,
+              Math.min(item.x, window.innerWidth - 100),
+            ),
+            y: Math.max(
+              0,
+              Math.min(
+                item.y,
+                window.innerHeight - TASKBAR_HEIGHT - 30,
+              ),
+            ),
+          };
+        }),
+      );
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   const unlockedApps = APPS.filter(
@@ -308,14 +556,26 @@ export default function HomePage() {
           if (existing) {
             return current.map((item) =>
               item.id === id
-                ? { ...item, minimized: false, zIndex: next }
+                ? {
+                    ...item,
+                    minimized: false,
+                    zIndex: next,
+                  }
                 : item,
             );
           }
 
+          const bounds = getInitialBounds(id);
+
           return [
             ...current,
-            { id, minimized: false, zIndex: next },
+            {
+              id,
+              minimized: false,
+              zIndex: next,
+              ...bounds,
+              maximized: false,
+            },
           ];
         });
 
@@ -329,11 +589,15 @@ export default function HomePage() {
   );
 
   const closeWindow = (id: AppId) => {
-    setWindows((current) => current.filter((item) => item.id !== id));
+    const remaining = windows.filter((item) => item.id !== id);
+    setWindows(remaining);
 
     if (activeWindow === id) {
-      const remaining = windows.filter((item) => item.id !== id);
-      setActiveWindow(remaining.length ? remaining[remaining.length - 1].id : null);
+      const next = remaining
+        .filter((item) => !item.minimized)
+        .sort((a, b) => b.zIndex - a.zIndex)[0];
+
+      setActiveWindow(next?.id ?? null);
     }
   };
 
@@ -344,7 +608,13 @@ export default function HomePage() {
       ),
     );
 
-    if (activeWindow === id) setActiveWindow(null);
+    if (activeWindow === id) {
+      const next = windows
+        .filter((item) => item.id !== id && !item.minimized)
+        .sort((a, b) => b.zIndex - a.zIndex)[0];
+
+      setActiveWindow(next?.id ?? null);
+    }
   };
 
   const focusWindow = (id: AppId) => {
@@ -365,8 +635,55 @@ export default function HomePage() {
     setActiveWindow(id);
   };
 
+  const updateWindowBounds = (id: AppId, bounds: WindowBounds) => {
+    setWindows((current) =>
+      current.map((item) =>
+        item.id === id && !item.maximized
+          ? { ...item, ...bounds }
+          : item,
+      ),
+    );
+  };
+
+  const toggleMaximize = (id: AppId) => {
+    setWindows((current) =>
+      current.map((item) => {
+        if (item.id !== id) return item;
+
+        if (item.maximized && item.restoreBounds) {
+          return {
+            ...item,
+            ...item.restoreBounds,
+            maximized: false,
+            restoreBounds: undefined,
+          };
+        }
+
+        return {
+          ...item,
+          restoreBounds: {
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+          },
+          x: 0,
+          y: 0,
+          width: window.innerWidth,
+          height: window.innerHeight - TASKBAR_HEIGHT,
+          maximized: true,
+        };
+      }),
+    );
+
+    focusWindow(id);
+  };
+
   useEffect(() => {
-    if (game.dossiers >= 10 && !windows.some((item) => item.id === "stats")) {
+    if (
+      game.dossiers >= 10 &&
+      !windows.some((item) => item.id === "stats")
+    ) {
       openApp("stats");
     }
   }, [game.dossiers, windows, openApp]);
@@ -397,9 +714,7 @@ export default function HomePage() {
       return;
     }
 
-    const safeCells = 25 - mines.length;
-
-    if (nextRevealed.length >= safeCells) {
+    if (nextRevealed.length >= 25 - mines.length) {
       setMineGameOver(true);
       setMineWon(true);
     }
@@ -418,11 +733,12 @@ export default function HomePage() {
     }));
   };
 
-  const purchasedCount = UPGRADE_LIST.filter(
-    (upgrade) =>
+  const purchasedCount = UPGRADE_LIST.filter((upgrade) =>
+    Boolean(
       game.upgrades[
         upgrade.id as keyof typeof game.upgrades
       ],
+    ),
   ).length;
 
   const careerNames = [
@@ -478,7 +794,9 @@ export default function HomePage() {
           <FileText size={38} />
           <div>
             <strong>Dossier administratif</strong>
-            <p>Référence : DOS-{String(game.dossiers + 1).padStart(5, "0")}</p>
+            <p>
+              Référence : DOS-{String(game.dossiers + 1).padStart(5, "0")}
+            </p>
             <p>Statut : en attente de traitement</p>
           </div>
         </div>
@@ -492,8 +810,8 @@ export default function HomePage() {
         </button>
 
         <p className="hint-text">
-          Traitez les dossiers pour gagner de l'argent et débloquer de nouvelles
-          applications.
+          Traitez les dossiers pour gagner de l'argent et débloquer de
+          nouvelles applications.
         </p>
       </div>
 
@@ -501,8 +819,11 @@ export default function HomePage() {
         <h3>Votre carrière</h3>
         <span className="level-tag">Niveau {game.careerLevel + 1}</span>
       </div>
+
       <div className="career-card">
-        <div className="career-icon"><GraduationCap size={24} /></div>
+        <div className="career-icon">
+          <GraduationCap size={24} />
+        </div>
         <div>
           <strong>{careerName}</strong>
           <p>Continuez à travailler pour gravir les échelons.</p>
@@ -514,7 +835,9 @@ export default function HomePage() {
   const renderCatalog = () => (
     <div className="app-panel">
       <div className="welcome-panel compact">
-        <div className="welcome-icon"><ShoppingCart size={28} /></div>
+        <div className="welcome-icon">
+          <ShoppingCart size={28} />
+        </div>
         <div>
           <h2>Catalogue des améliorations</h2>
           <p>Investissez dans votre productivité.</p>
@@ -529,22 +852,28 @@ export default function HomePage() {
       <div className="upgrade-list">
         {UPGRADE_LIST.map((upgrade) => {
           const Icon = upgrade.icon;
-          const owned =
-            Boolean(
-              game.upgrades[
-                upgrade.id as keyof typeof game.upgrades
-              ],
-            );
+          const owned = Boolean(
+            game.upgrades[
+              upgrade.id as keyof typeof game.upgrades
+            ],
+          );
           const affordable = game.cash >= upgrade.cost;
 
           return (
-            <div className={`upgrade-card ${owned ? "upgrade-owned" : ""}`} key={upgrade.id}>
-              <div className="upgrade-icon"><Icon size={22} /></div>
+            <div
+              className={`upgrade-card ${owned ? "upgrade-owned" : ""}`}
+              key={upgrade.id}
+            >
+              <div className="upgrade-icon">
+                <Icon size={22} />
+              </div>
 
               <div className="upgrade-info">
                 <strong>{upgrade.name}</strong>
                 <p>{upgrade.description}</p>
-                <span className="upgrade-cost">{formatMoney(upgrade.cost)}</span>
+                <span className="upgrade-cost">
+                  {formatMoney(upgrade.cost)}
+                </span>
               </div>
 
               <button
@@ -553,7 +882,9 @@ export default function HomePage() {
                 onClick={() => game.buyUpgrade(upgrade.id)}
               >
                 {owned ? (
-                  <><Check size={14} /> Acheté</>
+                  <>
+                    <Check size={14} /> Acheté
+                  </>
                 ) : (
                   "Acheter"
                 )}
@@ -568,7 +899,9 @@ export default function HomePage() {
   const renderStats = () => (
     <div className="app-panel">
       <div className="welcome-panel compact">
-        <div className="welcome-icon"><ChartNoAxesCombined size={28} /></div>
+        <div className="welcome-icon">
+          <ChartNoAxesCombined size={28} />
+        </div>
         <div>
           <h2>Statistiques du bureau</h2>
           <p>Les chiffres ne mentent jamais… normalement.</p>
@@ -595,7 +928,10 @@ export default function HomePage() {
       </div>
 
       <div className="report-box">
-        <h3><TrendingUp size={18} /> Rapport de productivité</h3>
+        <h3>
+          <TrendingUp size={18} />
+          Rapport de productivité
+        </h3>
         <div className="report-row">
           <span>Avancement de carrière</span>
           <strong>{careerName}</strong>
@@ -608,7 +944,9 @@ export default function HomePage() {
           <span>Part des dossiers rémunérés</span>
           <strong>
             {game.dossiers > 0
-              ? `${Math.round((game.paidDossiers / game.dossiers) * 100)} %`
+              ? `${Math.round(
+                  (game.paidDossiers / game.dossiers) * 100,
+                )} %`
               : "0 %"}
           </strong>
         </div>
@@ -650,7 +988,9 @@ export default function HomePage() {
     return (
       <div className="app-panel">
         <div className="welcome-panel compact">
-          <div className="welcome-icon"><Users size={28} /></div>
+          <div className="welcome-icon">
+            <Users size={28} />
+          </div>
           <div>
             <h2>Service du personnel</h2>
             <p>Votre avenir professionnel est entre vos mains.</p>
@@ -658,7 +998,9 @@ export default function HomePage() {
         </div>
 
         <div className="career-card large-career-card">
-          <div className="career-icon"><ShieldCheck size={30} /></div>
+          <div className="career-icon">
+            <ShieldCheck size={30} />
+          </div>
           <div>
             <span className="stat-label">Poste actuel</span>
             <strong>{careerName}</strong>
@@ -702,7 +1044,9 @@ export default function HomePage() {
   const renderMinesweeper = () => (
     <div className="app-panel">
       <div className="welcome-panel compact">
-        <div className="welcome-icon"><Bomb size={28} /></div>
+        <div className="welcome-icon">
+          <Bomb size={28} />
+        </div>
         <div>
           <h2>Démineur</h2>
           <p>Faites une pause entre deux dossiers.</p>
@@ -710,7 +1054,9 @@ export default function HomePage() {
       </div>
 
       <div className="mine-toolbar">
-        <span><Bomb size={16} /> {mines.length || 4} mines</span>
+        <span>
+          <Bomb size={16} /> {mines.length || 4} mines
+        </span>
         <button className="retro-button" onClick={startMineGame}>
           <RotateCcw size={14} /> Nouvelle partie
         </button>
@@ -720,7 +1066,10 @@ export default function HomePage() {
         <div className="mine-intro">
           <Bomb size={42} />
           <p>Commencez une partie pour générer une grille.</p>
-          <button className="retro-button primary-button" onClick={startMineGame}>
+          <button
+            className="retro-button primary-button"
+            onClick={startMineGame}
+          >
             <Play size={15} /> Jouer
           </button>
         </div>
@@ -734,7 +1083,9 @@ export default function HomePage() {
               return (
                 <button
                   key={index}
-                  className={`mine-cell ${isRevealed ? "mine-cell-revealed" : ""}`}
+                  className={`mine-cell ${
+                    isRevealed ? "mine-cell-revealed" : ""
+                  }`}
                   disabled={mineGameOver || isRevealed}
                   onClick={() => revealCell(index)}
                   aria-label={`Case ${index + 1}`}
@@ -753,13 +1104,25 @@ export default function HomePage() {
 
           {mineGameOver && (
             <div className="mine-result">
-              <strong>{mineWon ? "Bravo, grille nettoyée !" : "Boum ! Partie terminée."}</strong>
+              <strong>
+                {mineWon
+                  ? "Bravo, grille nettoyée !"
+                  : "Boum ! Partie terminée."}
+              </strong>
+
               {mineWon && !mineRewardClaimed && (
-                <button className="retro-button primary-button" onClick={claimMineReward}>
+                <button
+                  className="retro-button primary-button"
+                  onClick={claimMineReward}
+                >
                   Réclamer 2 €
                 </button>
               )}
-              {mineRewardClaimed && <p>Récompense de 2 € ajoutée à votre trésorerie.</p>}
+
+              {mineRewardClaimed && (
+                <p>Récompense de 2 € ajoutée à votre trésorerie.</p>
+              )}
+
               <button className="retro-button" onClick={startMineGame}>
                 Rejouer
               </button>
@@ -777,7 +1140,9 @@ export default function HomePage() {
   const renderHelp = () => (
     <div className="app-panel">
       <div className="welcome-panel compact">
-        <div className="welcome-icon"><CircleHelp size={28} /></div>
+        <div className="welcome-icon">
+          <CircleHelp size={28} />
+        </div>
         <div>
           <h2>Centre d'aide</h2>
           <p>Le guide officiel de votre bureau.</p>
@@ -785,49 +1150,78 @@ export default function HomePage() {
       </div>
 
       <div className="help-item">
-        <div className="help-icon"><FileText size={21} /></div>
+        <div className="help-icon">
+          <FileText size={21} />
+        </div>
         <div>
           <strong>Traiter les dossiers</strong>
-          <p>Ouvrez le Poste de travail et cliquez sur le bouton de traitement pour progresser.</p>
+          <p>
+            Ouvrez le Poste de travail et cliquez sur le bouton de traitement
+            pour progresser.
+          </p>
         </div>
       </div>
 
       <div className="help-item">
-        <div className="help-icon"><ShoppingCart size={21} /></div>
+        <div className="help-icon">
+          <ShoppingCart size={21} />
+        </div>
         <div>
           <strong>Acheter des améliorations</strong>
-          <p>Utilisez votre trésorerie pour acheter des améliorations et augmenter votre efficacité.</p>
+          <p>
+            Utilisez votre trésorerie pour acheter des améliorations et
+            augmenter votre efficacité.
+          </p>
         </div>
       </div>
 
       <div className="help-item">
-        <div className="help-icon"><LockKeyhole size={21} /></div>
+        <div className="help-icon">
+          <LockKeyhole size={21} />
+        </div>
         <div>
           <strong>Débloquer des applications</strong>
-          <p>De nouvelles applications apparaissent à mesure que vous traitez des dossiers.</p>
+          <p>
+            De nouvelles applications apparaissent à mesure que vous traitez
+            des dossiers.
+          </p>
         </div>
       </div>
 
       <div className="help-item">
-        <div className="help-icon"><Trophy size={21} /></div>
+        <div className="help-icon">
+          <Trophy size={21} />
+        </div>
         <div>
           <strong>Gravir les échelons</strong>
-          <p>Investissez dans votre bureau et remplissez les conditions du service du personnel pour obtenir une promotion.</p>
+          <p>
+            Investissez dans votre bureau et remplissez les conditions du
+            service du personnel pour obtenir une promotion.
+          </p>
         </div>
       </div>
 
       <div className="help-item">
-        <div className="help-icon"><Bomb size={21} /></div>
+        <div className="help-icon">
+          <Bomb size={21} />
+        </div>
         <div>
           <strong>Faire une pause</strong>
-          <p>Le Démineur est un mini-jeu qui permet de gagner une petite récompense.</p>
+          <p>
+            Le Démineur est un mini-jeu qui permet de gagner une petite
+            récompense.
+          </p>
         </div>
       </div>
 
       <button
         className="retro-button"
         onClick={() => {
-          if (window.confirm("Voulez-vous vraiment recommencer une nouvelle partie ? Votre progression actuelle sera perdue.")) {
+          if (
+            window.confirm(
+              "Voulez-vous vraiment recommencer une nouvelle partie ? Votre progression actuelle sera perdue.",
+            )
+          ) {
             game.resetGame();
             setWindows([]);
             setActiveWindow(null);
@@ -846,7 +1240,7 @@ export default function HomePage() {
     </div>
   );
 
-  const windowContent: Record<AppId, () => React.ReactNode> = {
+  const windowContent: Record<AppId, () => ReactNode> = {
     work: renderWork,
     catalog: renderCatalog,
     stats: renderStats,
@@ -882,7 +1276,11 @@ export default function HomePage() {
           const Icon = app.icon;
 
           return (
-            <div className="desktop-icon locked-desktop-icon" key={app.id} title={`Débloqué à ${app.unlockAt} dossiers`}>
+            <div
+              className="desktop-icon locked-desktop-icon"
+              key={app.id}
+              title={`Débloqué à ${app.unlockAt} dossiers`}
+            >
               <div className="locked-icon">
                 <Icon size={32} strokeWidth={1.5} />
                 <LockKeyhole size={13} className="lock-overlay" />
@@ -895,7 +1293,9 @@ export default function HomePage() {
       </div>
 
       <div className="desktop-note">
-        <div className="note-title"><FileText size={14} /> Note.txt</div>
+        <div className="note-title">
+          <FileText size={14} /> Note.txt
+        </div>
         <p>Bienvenue, collègue.</p>
         <p>Votre bureau vous attend.</p>
         <p>— La direction</p>
@@ -915,8 +1315,21 @@ export default function HomePage() {
             onClose={() => closeWindow(item.id)}
             onMinimize={() => minimizeWindow(item.id)}
             onFocus={() => focusWindow(item.id)}
+            onToggleMaximize={() => toggleMaximize(item.id)}
+            onBoundsChange={(bounds) =>
+              updateWindowBounds(item.id, bounds)
+            }
+            bounds={{
+              x: item.x,
+              y: item.y,
+              width: item.width,
+              height: item.height,
+            }}
+            maximized={item.maximized}
             zIndex={item.zIndex}
-            className={`window-${item.id} ${activeWindow === item.id ? "window-active" : ""}`}
+            className={`window-${item.id} ${
+              activeWindow === item.id ? "window-active" : ""
+            }`}
           >
             {windowContent[item.id]()}
           </WindowFrame>
@@ -925,10 +1338,16 @@ export default function HomePage() {
 
       {startMenuOpen && (
         <>
-          <div className="start-menu-backdrop" onClick={() => setStartMenuOpen(false)} />
+          <div
+            className="start-menu-backdrop"
+            onClick={() => setStartMenuOpen(false)}
+          />
+
           <div className="start-menu">
             <div className="start-menu-brand">
-              <div className="brand-mark"><Monitor size={29} /></div>
+              <div className="brand-mark">
+                <Monitor size={29} />
+              </div>
               <div>
                 <strong>Bureau Simulator</strong>
                 <span>Édition professionnelle</span>
@@ -937,6 +1356,7 @@ export default function HomePage() {
 
             <div className="start-menu-section">
               <span className="start-menu-heading">Applications</span>
+
               {unlockedApps.map((app) => {
                 const Icon = app.icon;
 
@@ -962,10 +1382,13 @@ export default function HomePage() {
                 <CircleHelp size={18} />
                 <span>Aide et support</span>
               </button>
+
               <button
                 className="start-menu-item"
                 onClick={() => {
-                  if (window.confirm("Réinitialiser toute votre progression ?")) {
+                  if (
+                    window.confirm("Réinitialiser toute votre progression ?")
+                  ) {
                     game.resetGame();
                     setWindows([]);
                     setActiveWindow(null);
@@ -983,7 +1406,9 @@ export default function HomePage() {
 
       <footer className="taskbar">
         <button
-          className={`start-button ${startMenuOpen ? "start-button-active" : ""}`}
+          className={`start-button ${
+            startMenuOpen ? "start-button-active" : ""
+          }`}
           onClick={() => setStartMenuOpen((value) => !value)}
         >
           <Monitor size={18} />
@@ -1001,7 +1426,11 @@ export default function HomePage() {
             return (
               <button
                 key={item.id}
-                className={`taskbar-app ${activeWindow === item.id && !item.minimized ? "taskbar-app-active" : ""}`}
+                className={`taskbar-app ${
+                  activeWindow === item.id && !item.minimized
+                    ? "taskbar-app-active"
+                    : ""
+                }`}
                 onClick={() => {
                   if (activeWindow === item.id && !item.minimized) {
                     minimizeWindow(item.id);

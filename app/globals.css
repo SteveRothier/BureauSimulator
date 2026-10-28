@@ -1,14 +1,8 @@
-
+/* app/globals.css */
 @import "tailwindcss";
-
-/* =========================
-   BUREAU SIMULATOR
-   Style rétro Windows 95/98
-   ========================= */
 
 :root {
   --desktop: #087e83;
-  --desktop-dark: #056b70;
   --window: #c0c0c0;
   --window-light: #ffffff;
   --window-mid: #dfdfdf;
@@ -69,23 +63,20 @@ svg {
   flex-shrink: 0;
 }
 
-/* =========================
-   BUREAU
-   ========================= */
+/* BUREAU */
 
 .desktop {
   position: fixed;
   inset: 0;
   overflow: hidden;
-  background-color: var(--desktop);
-  background-image:
-    radial-gradient(
-      ellipse at 50% 30%,
-      rgba(255, 255, 255, 0.045),
-      transparent 65%
-    );
-  color: white;
   isolation: isolate;
+  color: white;
+  background-color: var(--desktop);
+  background-image: radial-gradient(
+    ellipse at 50% 30%,
+    rgba(255, 255, 255, 0.045),
+    transparent 65%
+  );
 }
 
 .desktop-icons {
@@ -93,15 +84,15 @@ svg {
   top: 16px;
   left: 12px;
   bottom: calc(var(--taskbar-height) + 12px);
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
   flex-wrap: wrap;
   align-content: flex-start;
+  align-items: flex-start;
   gap: 8px;
   width: 100px;
   overflow: visible;
-  z-index: 1;
 }
 
 .desktop-icon {
@@ -171,19 +162,19 @@ svg {
   background: var(--desktop);
 }
 
-/* Petite note sur le bureau */
+/* NOTE DU BUREAU */
 
 .desktop-note {
   position: absolute;
   top: 24px;
   right: 20px;
+  z-index: 1;
   width: 220px;
   padding: 10px;
   border: 1px solid rgba(255, 255, 255, 0.25);
   background: rgba(0, 65, 69, 0.28);
   color: white;
   font-size: 12px;
-  z-index: 1;
 }
 
 .note-title {
@@ -201,19 +192,14 @@ svg {
   line-height: 1.4;
 }
 
-/* =========================
-   FENÊTRES
-   ========================= */
+/* FENÊTRES */
 
 .window {
   position: absolute;
-  top: 7%;
-  left: 50%;
-  width: min(650px, calc(100vw - 150px));
-  max-width: calc(100vw - 24px);
-  max-height: calc(100vh - var(--taskbar-height) - 30px);
   display: flex;
   flex-direction: column;
+  min-width: 300px;
+  min-height: 180px;
   overflow: hidden;
   color: var(--text);
   background: var(--window);
@@ -223,7 +209,6 @@ svg {
   box-shadow:
     inset 1px 1px var(--window-mid),
     2px 2px 0 rgba(0, 0, 0, 0.25);
-  transform: translateX(-50%);
 }
 
 .window-active {
@@ -232,7 +217,13 @@ svg {
     3px 3px 0 rgba(0, 0, 0, 0.22);
 }
 
+.window-maximized {
+  border-width: 2px;
+}
+
 .window-titlebar {
+  position: relative;
+  z-index: 6;
   min-height: 30px;
   flex-shrink: 0;
   display: flex;
@@ -243,6 +234,8 @@ svg {
   color: white;
   background: var(--titlebar-inactive);
   user-select: none;
+  cursor: move;
+  touch-action: none;
 }
 
 .window-active .window-titlebar {
@@ -254,8 +247,8 @@ svg {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-weight: bold;
   overflow: hidden;
+  font-weight: bold;
 }
 
 .window-title span {
@@ -270,8 +263,10 @@ svg {
 }
 
 .window-controls {
+  flex-shrink: 0;
   display: flex;
   gap: 3px;
+  cursor: default;
 }
 
 .window-control {
@@ -287,6 +282,7 @@ svg {
   border-color: var(--window-light) var(--window-dark) var(--window-dark)
     var(--window-light);
   border-radius: 0;
+  cursor: default;
 }
 
 .window-control:active {
@@ -295,6 +291,9 @@ svg {
 }
 
 .window-content {
+  position: relative;
+  flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
@@ -302,30 +301,96 @@ svg {
   background: var(--window);
 }
 
+/* POIGNÉES DE REDIMENSIONNEMENT */
+
+.window-resize-handle {
+  position: absolute;
+  z-index: 8;
+  display: block;
+  touch-action: none;
+}
+
+.resize-n,
+.resize-s {
+  left: 7px;
+  right: 7px;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.resize-n {
+  top: 0;
+}
+
+.resize-s {
+  bottom: 0;
+}
+
+.resize-e,
+.resize-w {
+  top: 7px;
+  bottom: 7px;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.resize-e {
+  right: 0;
+}
+
+.resize-w {
+  left: 0;
+}
+
+.resize-ne,
+.resize-nw,
+.resize-se,
+.resize-sw {
+  width: 12px;
+  height: 12px;
+}
+
+.resize-ne {
+  top: 0;
+  right: 0;
+  cursor: nesw-resize;
+}
+
+.resize-nw {
+  top: 0;
+  left: 0;
+  cursor: nwse-resize;
+}
+
+.resize-se {
+  right: 0;
+  bottom: 0;
+  cursor: nwse-resize;
+}
+
+.resize-sw {
+  left: 0;
+  bottom: 0;
+  cursor: nesw-resize;
+}
+
+.window-maximized .window-resize-handle {
+  display: none;
+}
+
 .window-work {
-  width: min(650px, calc(100vw - 150px));
+  /* Position and dimensions are controlled by React. */
 }
 
-.window-catalog {
-  width: min(760px, calc(100vw - 150px));
-}
-
+.window-catalog,
 .window-stats,
-.window-personnel {
-  width: min(620px, calc(100vw - 150px));
-}
-
-.window-minesweeper {
-  width: min(430px, calc(100vw - 150px));
-}
-
+.window-personnel,
+.window-minesweeper,
 .window-help {
-  width: min(570px, calc(100vw - 150px));
+  /* Position and dimensions are controlled by React. */
 }
 
-/* =========================
-   CONTENU DES APPLICATIONS
-   ========================= */
+/* CONTENU DES APPLICATIONS */
 
 .app-panel {
   display: flex;
@@ -386,8 +451,8 @@ svg {
   gap: 7px;
   background: #e5e5e5;
   border: 1px solid;
-  border-color: var(--window-shadow) var(--window-light)
-    var(--window-light) var(--window-shadow);
+  border-color: var(--window-shadow) var(--window-light) var(--window-light)
+    var(--window-shadow);
 }
 
 .stat-label {
@@ -416,7 +481,7 @@ svg {
   align-items: center;
   gap: 13px;
   padding: 10px;
-  background: #eeeeee;
+  background: #eee;
   border: 1px solid #bbb;
 }
 
@@ -501,9 +566,7 @@ svg {
   height: 55px;
 }
 
-/* =========================
-   BOUTONS
-   ========================= */
+/* BOUTONS */
 
 .retro-button {
   min-height: 31px;
@@ -529,12 +592,6 @@ svg {
 .retro-button:active:not(:disabled) {
   border-color: var(--window-dark) var(--window-light) var(--window-light)
     var(--window-dark);
-  padding-top: 6px;
-  padding-bottom: 4px;
-}
-
-.retro-button:disabled {
-  color: #777;
 }
 
 .primary-button {
@@ -544,8 +601,8 @@ svg {
 .process-button {
   min-height: 42px;
   padding: 9px 18px;
-  background: #000080;
   color: white;
+  background: #000080;
   border-color: #6060b0 #000040 #000040 #6060b0;
 }
 
@@ -553,9 +610,7 @@ svg {
   background: #17179b;
 }
 
-/* =========================
-   CATALOGUE
-   ========================= */
+/* CATALOGUE DES AMÉLIORATIONS */
 
 .catalog-balance {
   display: flex;
@@ -626,9 +681,7 @@ svg {
   font-weight: bold;
 }
 
-/* =========================
-   STATISTIQUES ET RAPPORTS
-   ========================= */
+/* RAPPORTS ET STATISTIQUES */
 
 .report-box {
   padding: 13px;
@@ -679,9 +732,7 @@ svg {
   color: #087a08;
 }
 
-/* =========================
-   DÉMINEUR
-   ========================= */
+/* DÉMINEUR */
 
 .mine-toolbar {
   display: flex;
@@ -727,8 +778,8 @@ svg {
   padding: 7px;
   background: #999;
   border: 2px solid;
-  border-color: var(--window-shadow) var(--window-light)
-    var(--window-light) var(--window-shadow);
+  border-color: var(--window-shadow) var(--window-light) var(--window-light)
+    var(--window-shadow);
 }
 
 .mine-cell {
@@ -769,9 +820,7 @@ svg {
   font-size: 14px;
 }
 
-/* =========================
-   AIDE
-   ========================= */
+/* AIDE */
 
 .help-item {
   display: flex;
@@ -806,9 +855,7 @@ svg {
   line-height: 1.5;
 }
 
-/* =========================
-   MENU DÉMARRER
-   ========================= */
+/* MENU DÉMARRER */
 
 .start-menu-backdrop {
   position: fixed;
@@ -918,9 +965,7 @@ svg {
   border-top: 1px solid #999;
 }
 
-/* =========================
-   BARRE DES TÂCHES
-   ========================= */
+/* BARRE DES TÂCHES */
 
 .taskbar {
   position: absolute;
@@ -1050,9 +1095,7 @@ svg {
   font-size: 10px;
 }
 
-/* =========================
-   ADAPTATION PETITS ÉCRANS
-   ========================= */
+/* PETITS ÉCRANS */
 
 @media (max-width: 700px) {
   :root {
@@ -1086,19 +1129,13 @@ svg {
     font-size: 10px;
   }
 
-  .window,
-  .window-work,
-  .window-catalog,
-  .window-stats,
-  .window-personnel,
-  .window-minesweeper,
-  .window-help {
-    top: 8px;
-    left: 8px;
-    width: calc(100vw - 16px);
-    max-width: calc(100vw - 16px);
-    max-height: calc(100dvh - var(--taskbar-height) - 16px);
-    transform: none;
+  .window {
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .window-resize-handle {
+    display: none;
   }
 
   .window-content {
@@ -1188,6 +1225,10 @@ svg {
   .clock {
     min-width: 48px;
     font-size: 11px;
+  }
+
+  .clock small {
+    font-size: 9px;
   }
 }
 
