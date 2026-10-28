@@ -1,4 +1,3 @@
-
 import { create } from "zustand";
 
 export type UpgradeId =
@@ -18,6 +17,7 @@ export type Upgrade = {
   id: UpgradeId;
   name: string;
   description: string;
+  effect: string;
   cost: number;
   owned: boolean;
   icon: string;
@@ -40,91 +40,141 @@ type GameState = {
   hydrate: () => void;
 };
 
+/* ------------------------------------------------------------------ */
+/*  Constantes d'équilibrage                                           */
+/* ------------------------------------------------------------------ */
+
 export const INITIAL_CASH = 5;
-export const BASE_INCOME = 0.03;
+export const BASE_INCOME = 0.25; // gain d'un dossier rémunéré au départ
 export const MAX_CASH = 999_999_999;
 
+const BASE_PAID_SLOTS = 4; // dossiers rémunérés sur 10 au départ
+const MAX_PAID_SLOTS = 10;
+const INCOME_SCALE_CAP = 3000; // le gain de base progresse jusqu'à ce volume
+const CAREER_BONUS = 0.1; // +10 % de revenus par promotion
+const OFFLINE_RATE = 0.05; // dossiers/seconde simulés hors ligne
+const OFFLINE_MAX_SECONDS = 8 * 60 * 60;
+
 const SAVE_KEY = "bureau-simulator-save-v1";
+
+/* ------------------------------------------------------------------ */
+/*  Définition des améliorations                                       */
+/* ------------------------------------------------------------------ */
+
+type Effects = {
+  slots?: number; // dossiers rémunérés supplémentaires sur 10
+  mult?: number; // multiplicateur de revenus
+  perClick?: number; // dossiers supplémentaires par clic
+};
+
+const EFFECTS: Record<UpgradeId, Effects> = {
+  procedures: { slots: 2 },
+  coffee: { mult: 1.25 },
+  training: { slots: 2 },
+  stamp: { mult: 1.25 },
+  shortcuts: { perClick: 1 },
+  printer: { slots: 1, mult: 1.2 },
+  workflow: { mult: 1.3 },
+  dashboard: { slots: 1, mult: 1.2 },
+  anticipation: { mult: 1.4 },
+  assistant: {},
+  promotionReport: {},
+};
 
 const definitions: Omit<Upgrade, "owned">[] = [
   {
     id: "procedures",
     name: "Procédures standardisées",
-    description: "Augmente les chances qu'un dossier soit rémunéré.",
-    cost: 12,
+    description: "Moins de paperasse inutile, plus de dossiers payés.",
+    effect: "+2 dossiers rémunérés sur 10",
+    cost: 8,
     icon: "ClipboardList",
   },
   {
     id: "coffee",
     name: "Café de bureau",
-    description: "Augmente les revenus de 20 %.",
-    cost: 18,
+    description: "Un petit coup de fouet pour votre productivité.",
+    effect: "+25 % de revenus",
+    cost: 20,
     icon: "Coffee",
   },
   {
     id: "training",
     name: "Formation express",
-    description: "Améliore les chances de rémunération.",
-    cost: 35,
+    description: "Trois jours de stage pour gagner en efficacité.",
+    effect: "+2 dossiers rémunérés sur 10",
+    cost: 50,
     icon: "GraduationCap",
   },
   {
     id: "stamp",
     name: "Tampon officiel",
-    description: "Les dossiers rapportent davantage.",
-    cost: 55,
+    description: "Un dossier tamponné est un dossier mieux payé.",
+    effect: "+25 % de revenus",
+    cost: 110,
     icon: "Stamp",
   },
   {
     id: "shortcuts",
     name: "Raccourcis clavier",
-    description: "Optimise le travail quotidien.",
-    cost: 90,
+    description: "Ctrl+C, Ctrl+V : le travail va deux fois plus vite.",
+    effect: "+1 dossier traité par clic",
+    cost: 240,
     icon: "Keyboard",
   },
   {
     id: "printer",
     name: "Imprimante laser",
-    description: "Un équipement plus fiable.",
-    cost: 150,
+    description: "Plus de bourrage papier pendant les heures de pointe.",
+    effect: "+1 dossier rémunéré sur 10 et +20 % de revenus",
+    cost: 480,
     icon: "Printer",
   },
   {
     id: "workflow",
     name: "Flux optimisé",
-    description: "Augmente les revenus de 10 %.",
-    cost: 250,
+    description: "Chaque étape a enfin un responsable identifié.",
+    effect: "+30 % de revenus et gains hors ligne ×1,5",
+    cost: 900,
     icon: "Workflow",
   },
   {
     id: "dashboard",
     name: "Tableau de bord",
-    description: "Améliore les chances et les revenus.",
-    cost: 420,
+    description: "Des graphiques que personne ne lit, mais ça rassure.",
+    effect: "+1 dossier rémunéré sur 10 et +20 % de revenus",
+    cost: 1600,
     icon: "Chart",
   },
   {
     id: "anticipation",
     name: "Traitement anticipé",
-    description: "Augmente les revenus de 15 %.",
-    cost: 700,
+    description: "Vous traitez les dossiers avant même de les recevoir.",
+    effect: "+40 % de revenus",
+    cost: 2800,
     icon: "ScanSearch",
   },
   {
     id: "assistant",
     name: "Assistant administratif",
-    description: "Débloque les revenus hors ligne.",
-    cost: 1200,
+    description: "Il continue de travailler quand vous n'êtes pas là.",
+    effect: "Débloque les revenus hors ligne (8 h max)",
+    cost: 4500,
     icon: "UserRound",
   },
   {
     id: "promotionReport",
     name: "Rapport de promotion",
     description: "Prépare votre candidature au poste supérieur.",
-    cost: 2000,
+    effect: "Requis pour la promotion",
+    cost: 8000,
     icon: "FileText",
   },
 ];
+
+export const UPGRADE_IDS: UpgradeId[] = definitions.map(
+  (upgrade) => upgrade.id,
+);
 
 function makeUpgrades(
   owned: UpgradeId[] = [],
@@ -140,6 +190,10 @@ function makeUpgrades(
 const cap = (value: number) =>
   Math.min(MAX_CASH, Math.max(0, value));
 
+/* ------------------------------------------------------------------ */
+/*  Carrière                                                           */
+/* ------------------------------------------------------------------ */
+
 export const CAREER = [
   "Stagiaire administratif",
   "Employé confirmé",
@@ -153,46 +207,98 @@ export const CAREER = [
   "Président du groupe",
 ];
 
-function isPaidDossier(
-  dossier: number,
-  upgrades: Record<UpgradeId, Upgrade>,
+// Les conditions augmentent à chaque promotion : impossible d'enchaîner.
+export function promotionRequirements(level: number) {
+  return {
+    dossiers: 2000 * (level + 1),
+    revenue: 10000 * (level + 1) * (level + 1),
+    upgrades: 7,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Calculs économiques (utilisables par l'interface)                  */
+/* ------------------------------------------------------------------ */
+
+type Upgrades = Record<UpgradeId, Upgrade>;
+
+function owned(upgrades: Upgrades) {
+  return UPGRADE_IDS.filter((id) => upgrades[id].owned);
+}
+
+export function paidSlots(upgrades: Upgrades) {
+  const bonus = owned(upgrades).reduce(
+    (sum, id) => sum + (EFFECTS[id].slots ?? 0),
+    0,
+  );
+
+  return Math.min(MAX_PAID_SLOTS, BASE_PAID_SLOTS + bonus);
+}
+
+export function dossiersPerClick(upgrades: Upgrades) {
+  return (
+    1 +
+    owned(upgrades).reduce(
+      (sum, id) => sum + (EFFECTS[id].perClick ?? 0),
+      0,
+    )
+  );
+}
+
+export function revenueMultiplier(
+  upgrades: Upgrades,
+  careerLevel: number,
 ) {
-  if (dossier <= 8) return false;
+  const upgradesBonus = owned(upgrades).reduce(
+    (product, id) => product * (EFFECTS[id].mult ?? 1),
+    1,
+  );
 
-  const denominator =
-    dossier < 25 ? 4 :
-    dossier < 65 ? 3 :
-    dossier < 150 ? 2 : 3;
+  return upgradesBonus * (1 + CAREER_BONUS * careerLevel);
+}
 
-  let numerator = dossier < 150 ? 1 : 2;
-
-  if (upgrades.procedures.owned) numerator++;
-  if (upgrades.training.owned) numerator++;
-  if (upgrades.dashboard.owned) numerator++;
-
-  numerator = Math.min(denominator, numerator);
-
-  return dossier % denominator < numerator;
+// Répartition régulière des dossiers payés (ex. 4 sur 10 bien espacés).
+function isPaidDossier(dossier: number, slots: number) {
+  return (
+    Math.floor((dossier * slots) / MAX_PAID_SLOTS) >
+    Math.floor(((dossier - 1) * slots) / MAX_PAID_SLOTS)
+  );
 }
 
 function dossierIncome(
   dossier: number,
-  upgrades: Record<UpgradeId, Upgrade>,
+  upgrades: Upgrades,
+  careerLevel: number,
 ) {
-  const tiers = Math.max(
-    0,
-    Math.floor((dossier - 8) / 25),
+  const scale = 1 + Math.min(dossier, INCOME_SCALE_CAP) / 200;
+
+  return (
+    BASE_INCOME * scale * revenueMultiplier(upgrades, careerLevel)
   );
+}
 
-  let income = BASE_INCOME * Math.pow(1.35, tiers);
+// Gain moyen d'un dossier (payé ou non), utile pour l'affichage et le hors ligne.
+export function averageIncome(
+  dossiers: number,
+  upgrades: Upgrades,
+  careerLevel: number,
+) {
+  return (
+    dossierIncome(dossiers + 1, upgrades, careerLevel) *
+    (paidSlots(upgrades) / MAX_PAID_SLOTS)
+  );
+}
 
-  if (upgrades.coffee.owned) income *= 1.2;
-  if (upgrades.stamp.owned) income *= 1.15;
-  if (upgrades.dashboard.owned) income *= 1.2;
-  if (upgrades.anticipation.owned) income *= 1.15;
-  if (upgrades.workflow.owned) income *= 1.1;
-
-  return income;
+// Récompense du mini-jeu : proportionnelle au rythme du joueur.
+export function getMineReward(
+  dossiers: number,
+  upgrades: Upgrades,
+  careerLevel: number,
+) {
+  return Math.max(
+    2,
+    Math.round(averageIncome(dossiers, upgrades, careerLevel) * 12),
+  );
 }
 
 function freshState() {
@@ -208,20 +314,37 @@ function freshState() {
   };
 }
 
+/* ------------------------------------------------------------------ */
+/*  Store                                                              */
+/* ------------------------------------------------------------------ */
+
 export const useGameStore = create<GameState>((set, get) => ({
   ...freshState(),
 
   processDossier: () => {
     const state = get();
-    const dossier = state.dossiers + 1;
-    const paid = isPaidDossier(dossier, state.upgrades);
-    const income = paid
-      ? dossierIncome(dossier, state.upgrades)
-      : 0;
+    const count = dossiersPerClick(state.upgrades);
+    const slots = paidSlots(state.upgrades);
+
+    let income = 0;
+    let paidCount = 0;
+
+    for (let i = 1; i <= count; i++) {
+      const dossier = state.dossiers + i;
+
+      if (isPaidDossier(dossier, slots)) {
+        income += dossierIncome(
+          dossier,
+          state.upgrades,
+          state.careerLevel,
+        );
+        paidCount++;
+      }
+    }
 
     set({
-      dossiers: dossier,
-      paidDossiers: state.paidDossiers + (paid ? 1 : 0),
+      dossiers: state.dossiers + count,
+      paidDossiers: state.paidDossiers + paidCount,
       cash: cap(state.cash + income),
       companyRevenue: cap(state.companyRevenue + income),
       totalEarned: cap(state.totalEarned + income),
@@ -249,15 +372,15 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   promote: () => {
     const state = get();
-    const ownedCount = Object.values(state.upgrades)
-      .filter((upgrade) => upgrade.owned).length;
+    const ownedCount = owned(state.upgrades).length;
+    const req = promotionRequirements(state.careerLevel);
 
     const eligible =
-      state.dossiers >= 220 &&
-      state.companyRevenue >= 10 &&
+      state.dossiers >= req.dossiers &&
+      state.companyRevenue >= req.revenue &&
       state.upgrades.assistant.owned &&
       state.upgrades.promotionReport.owned &&
-      ownedCount >= 7 &&
+      ownedCount >= req.upgrades &&
       state.careerLevel < CAREER.length - 1;
 
     if (!eligible) return;
@@ -301,24 +424,33 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
       }
 
+      const careerLevel = Math.min(
+        CAREER.length - 1,
+        Math.max(0, saved.careerLevel ?? 0),
+      );
+
+      const dossiers = Math.max(0, saved.dossiers);
+
       const lastSavedAt =
         typeof saved.lastSavedAt === "number"
           ? saved.lastSavedAt
           : Date.now();
 
       const offlineSeconds = Math.min(
-        8 * 60 * 60,
+        OFFLINE_MAX_SECONDS,
         Math.max(0, (Date.now() - lastSavedAt) / 1000),
       );
 
       const offlineIncome = upgrades.assistant.owned
-        ? offlineSeconds * 0.02 *
+        ? offlineSeconds *
+          OFFLINE_RATE *
+          averageIncome(dossiers, upgrades, careerLevel) *
           (upgrades.workflow.owned ? 1.5 : 1)
         : 0;
 
       set({
         cash: cap(saved.cash + offlineIncome),
-        dossiers: Math.max(0, saved.dossiers),
+        dossiers,
         paidDossiers: Math.max(0, saved.paidDossiers ?? 0),
         companyRevenue: cap(
           (saved.companyRevenue ?? 0) + offlineIncome,
@@ -326,10 +458,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         totalEarned: cap(
           (saved.totalEarned ?? 0) + offlineIncome,
         ),
-        careerLevel: Math.min(
-          CAREER.length - 1,
-          Math.max(0, saved.careerLevel ?? 0),
-        ),
+        careerLevel,
         upgrades,
         lastSavedAt: Date.now(),
       });

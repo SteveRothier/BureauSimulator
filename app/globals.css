@@ -1258,3 +1258,39 @@ svg {
     grid-column: 2;
   }
 }
+
+.upgrade-effect {
+  display: block;
+  margin: 2px 0;
+  font-size: 12px;
+  font-weight: bold;
+  color: #006400;
+}
+ 
+.progress-bar {
+  height: 10px;
+  margin-top: 6px;
+  background: #ffffff;
+  border: 2px solid;
+  border-color: #808080 #ffffff #ffffff #808080;
+}
+ 
+.progress-fill {
+  height: 100%;
+  background: #000080;
+  transition: width 0.2s linear;
+}
+ 
+.next-goal {
+  padding: 8px 10px;
+  background: #c0c0c0;
+  border: 2px solid;
+  border-color: #ffffff #808080 #808080 #ffffff;
+}
+ 
+.next-goal-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}

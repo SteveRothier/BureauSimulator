@@ -32,7 +32,17 @@ import {
   Trophy,
   Play,
 } from "lucide-react";
-import { useGameStore } from "./store";
+import {
+  useGameStore,
+  UPGRADE_IDS,
+  averageIncome,
+  dossiersPerClick,
+  getMineReward,
+  paidSlots,
+  promotionRequirements,
+  revenueMultiplier,
+} from "./store";
+import type { UpgradeId } from "./store";
 
 type AppId =
   | "work"
@@ -114,85 +124,20 @@ const APPS: AppDefinition[] = [
   },
 ];
 
-const UPGRADE_LIST = [
-  {
-    id: "procedures",
-    name: "Procédures optimisées",
-    description: "Chaque dossier rapporte davantage.",
-    cost: 12,
-    icon: FileText,
-  },
-  {
-    id: "coffee",
-    name: "Café de bureau",
-    description: "Un petit coup de fouet pour votre productivité.",
-    cost: 18,
-    icon: Coffee,
-  },
-  {
-    id: "training",
-    name: "Formation interne",
-    description: "Améliore vos performances au travail.",
-    cost: 35,
-    icon: GraduationCap,
-  },
-  {
-    id: "stamp",
-    name: "Tampon officiel",
-    description: "Accélérez le traitement administratif.",
-    cost: 55,
-    icon: Stamp,
-  },
-  {
-    id: "shortcuts",
-    name: "Raccourcis clavier",
-    description: "Gagnez du temps sur les tâches répétitives.",
-    cost: 90,
-    icon: Zap,
-  },
-  {
-    id: "printer",
-    name: "Imprimante professionnelle",
-    description: "Un équipement plus performant.",
-    cost: 150,
-    icon: Printer,
-  },
-  {
-    id: "workflow",
-    name: "Flux de travail avancé",
-    description: "Améliore aussi les gains hors ligne.",
-    cost: 250,
-    icon: TrendingUp,
-  },
-  {
-    id: "dashboard",
-    name: "Tableau de bord",
-    description: "Pilotez vos résultats plus efficacement.",
-    cost: 420,
-    icon: ChartNoAxesCombined,
-  },
-  {
-    id: "anticipation",
-    name: "Gestion prévisionnelle",
-    description: "Anticipez les dossiers et les priorités.",
-    cost: 700,
-    icon: HardDrive,
-  },
-  {
-    id: "assistant",
-    name: "Assistant personnel",
-    description: "Permet de générer des revenus hors ligne.",
-    cost: 1200,
-    icon: Users,
-  },
-  {
-    id: "promotionReport",
-    name: "Rapport de promotion",
-    description: "Préparez votre prochaine promotion.",
-    cost: 2000,
-    icon: Trophy,
-  },
-] as const;
+// Les noms, coûts et effets viennent du store (source unique de vérité).
+const UPGRADE_ICONS: Record<UpgradeId, typeof FileText> = {
+  procedures: FileText,
+  coffee: Coffee,
+  training: GraduationCap,
+  stamp: Stamp,
+  shortcuts: Zap,
+  printer: Printer,
+  workflow: TrendingUp,
+  dashboard: ChartNoAxesCombined,
+  anticipation: HardDrive,
+  assistant: Users,
+  promotionReport: Trophy,
+};
 
 function formatMoney(value: number) {
   return new Intl.NumberFormat("fr-FR", {
@@ -725,21 +670,39 @@ export default function HomePage() {
 
     setMineRewardClaimed(true);
 
-    useGameStore.setState((state) => ({
-      cash: state.cash + 2,
-      companyRevenue: state.companyRevenue + 2,
-      totalEarned: state.totalEarned + 2,
-      lastSavedAt: Date.now(),
-    }));
+    useGameStore.setState((state) => {
+      const reward = getMineReward(
+        state.dossiers,
+        state.upgrades,
+        state.careerLevel,
+      );
+
+      return {
+        cash: state.cash + reward,
+        companyRevenue: state.companyRevenue + reward,
+        totalEarned: state.totalEarned + reward,
+        lastSavedAt: Date.now(),
+      };
+    });
   };
 
-  const purchasedCount = UPGRADE_LIST.filter((upgrade) =>
-    Boolean(
-      game.upgrades[
-        upgrade.id as keyof typeof game.upgrades
-      ],
-    ),
-  ).length;
+  const upgradeList = UPGRADE_IDS.map((id) => game.upgrades[id]);
+  const purchasedCount = upgradeList.filter((upgrade) => upgrade.owned).length;
+  const nextUpgrade = upgradeList.find((upgrade) => !upgrade.owned);
+
+  const slots = paidSlots(game.upgrades);
+  const perClick = dossiersPerClick(game.upgrades);
+  const multiplier = revenueMultiplier(game.upgrades, game.careerLevel);
+  const avgPerDossier = averageIncome(
+    game.dossiers,
+    game.upgrades,
+    game.careerLevel,
+  );
+  const mineReward = getMineReward(
+    game.dossiers,
+    game.upgrades,
+    game.careerLevel,
+  );
 
   const careerNames = [
     "Stagiaire administratif",
@@ -785,9 +748,52 @@ export default function HomePage() {
         </div>
         <div className="stat-card">
           <span className="stat-label">Améliorations</span>
-          <strong>{purchasedCount}/{UPGRADE_LIST.length}</strong>
+          <strong>{purchasedCount}/{UPGRADE_IDS.length}</strong>
         </div>
       </div>
+
+      <div className="report-box">
+        <h3>
+          <Zap size={18} />
+          Production
+        </h3>
+        <div className="report-row">
+          <span>Dossiers par clic</span>
+          <strong>{perClick}</strong>
+        </div>
+        <div className="report-row">
+          <span>Dossiers rémunérés</span>
+          <strong>{slots} sur 10</strong>
+        </div>
+        <div className="report-row">
+          <span>Bonus de revenus</span>
+          <strong>+{Math.round((multiplier - 1) * 100)} %</strong>
+        </div>
+        <div className="report-row">
+          <span>Gain moyen par clic</span>
+          <strong>{formatMoney(avgPerDossier * perClick)}</strong>
+        </div>
+      </div>
+
+      {nextUpgrade && (
+        <div className="next-goal">
+          <div className="next-goal-header">
+            <span>Prochain objectif : {nextUpgrade.name}</span>
+            <strong>
+              {formatMoney(Math.min(game.cash, nextUpgrade.cost))} /{" "}
+              {formatMoney(nextUpgrade.cost)}
+            </strong>
+          </div>
+          <div className="progress-bar">
+            <div
+              className="progress-fill"
+              style={{
+                width: `${Math.min(100, (game.cash / nextUpgrade.cost) * 100)}%`,
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       <div className="work-desk">
         <div className="work-document">
@@ -832,69 +838,97 @@ export default function HomePage() {
     </div>
   );
 
-  const renderCatalog = () => (
-    <div className="app-panel">
-      <div className="welcome-panel compact">
-        <div className="welcome-icon">
-          <ShoppingCart size={28} />
+  const renderCatalog = () => {
+    // Seules les 3 prochaines améliorations sont visibles : on découvre au fil du jeu.
+    const firstLocked = upgradeList.findIndex((upgrade) => !upgrade.owned);
+    const visibleLimit =
+      firstLocked === -1 ? upgradeList.length : firstLocked + 3;
+    const visibleUpgrades = upgradeList.slice(0, visibleLimit);
+    const hiddenCount = upgradeList.length - visibleUpgrades.length;
+
+    return (
+      <div className="app-panel">
+        <div className="welcome-panel compact">
+          <div className="welcome-icon">
+            <ShoppingCart size={28} />
+          </div>
+          <div>
+            <h2>Catalogue des améliorations</h2>
+            <p>Investissez dans votre productivité.</p>
+          </div>
         </div>
-        <div>
-          <h2>Catalogue des améliorations</h2>
-          <p>Investissez dans votre productivité.</p>
+
+        <div className="catalog-balance">
+          <span>Budget disponible</span>
+          <strong>{formatMoney(game.cash)}</strong>
         </div>
-      </div>
 
-      <div className="catalog-balance">
-        <span>Budget disponible</span>
-        <strong>{formatMoney(game.cash)}</strong>
-      </div>
+        <div className="upgrade-list">
+          {visibleUpgrades.map((upgrade) => {
+            const Icon = UPGRADE_ICONS[upgrade.id];
+            const affordable = game.cash >= upgrade.cost;
 
-      <div className="upgrade-list">
-        {UPGRADE_LIST.map((upgrade) => {
-          const Icon = upgrade.icon;
-          const owned = Boolean(
-            game.upgrades[
-              upgrade.id as keyof typeof game.upgrades
-            ],
-          );
-          const affordable = game.cash >= upgrade.cost;
-
-          return (
-            <div
-              className={`upgrade-card ${owned ? "upgrade-owned" : ""}`}
-              key={upgrade.id}
-            >
-              <div className="upgrade-icon">
-                <Icon size={22} />
-              </div>
-
-              <div className="upgrade-info">
-                <strong>{upgrade.name}</strong>
-                <p>{upgrade.description}</p>
-                <span className="upgrade-cost">
-                  {formatMoney(upgrade.cost)}
-                </span>
-              </div>
-
-              <button
-                className="retro-button"
-                disabled={owned || !affordable}
-                onClick={() => game.buyUpgrade(upgrade.id)}
+            return (
+              <div
+                className={`upgrade-card ${
+                  upgrade.owned ? "upgrade-owned" : ""
+                }`}
+                key={upgrade.id}
               >
-                {owned ? (
-                  <>
-                    <Check size={14} /> Acheté
-                  </>
-                ) : (
-                  "Acheter"
-                )}
-              </button>
-            </div>
-          );
-        })}
+                <div className="upgrade-icon">
+                  <Icon size={22} />
+                </div>
+
+                <div className="upgrade-info">
+                  <strong>{upgrade.name}</strong>
+                  <p>{upgrade.description}</p>
+                  <span className="upgrade-effect">{upgrade.effect}</span>
+                  <span className="upgrade-cost">
+                    {formatMoney(upgrade.cost)}
+                  </span>
+
+                  {!upgrade.owned && !affordable && (
+                    <div className="progress-bar">
+                      <div
+                        className="progress-fill"
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            (game.cash / upgrade.cost) * 100,
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  className="retro-button"
+                  disabled={upgrade.owned || !affordable}
+                  onClick={() => game.buyUpgrade(upgrade.id)}
+                >
+                  {upgrade.owned ? (
+                    <>
+                      <Check size={14} /> Acheté
+                    </>
+                  ) : (
+                    "Acheter"
+                  )}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        {hiddenCount > 0 && (
+          <p className="hint-text">
+            {hiddenCount} amélioration{hiddenCount > 1 ? "s" : ""} à
+            découvrir…
+          </p>
+        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderStats = () => (
     <div className="app-panel">
@@ -955,35 +989,32 @@ export default function HomePage() {
   );
 
   const renderPersonnel = () => {
-    const canPromote =
-      game.dossiers >= 220 &&
-      game.companyRevenue >= 10 &&
-      Boolean(game.upgrades.assistant) &&
-      Boolean(game.upgrades.promotionReport) &&
-      purchasedCount >= 7;
+    const req = promotionRequirements(game.careerLevel);
 
     const requirements = [
       {
-        label: "Traiter 220 dossiers",
-        met: game.dossiers >= 220,
+        label: `Traiter ${formatNumber(req.dossiers)} dossiers`,
+        met: game.dossiers >= req.dossiers,
       },
       {
-        label: "Atteindre 10 € de chiffre d'affaires",
-        met: game.companyRevenue >= 10,
+        label: `Atteindre ${formatMoney(req.revenue)} de chiffre d'affaires`,
+        met: game.companyRevenue >= req.revenue,
       },
       {
-        label: "Acheter l'assistant personnel",
-        met: Boolean(game.upgrades.assistant),
+        label: "Acheter l'assistant administratif",
+        met: game.upgrades.assistant.owned,
       },
       {
         label: "Acheter le rapport de promotion",
-        met: Boolean(game.upgrades.promotionReport),
+        met: game.upgrades.promotionReport.owned,
       },
       {
-        label: "Posséder 7 améliorations",
-        met: purchasedCount >= 7,
+        label: `Posséder ${req.upgrades} améliorations`,
+        met: purchasedCount >= req.upgrades,
       },
     ];
+
+    const canPromote = requirements.every((requirement) => requirement.met);
 
     return (
       <div className="app-panel">
@@ -1034,7 +1065,7 @@ export default function HomePage() {
 
         {!canPromote && (
           <p className="hint-text">
-            Remplissez toutes les conditions pour demander votre promotion.
+            Remplissez toutes les conditions pour demander votre promotion. Chaque promotion offre +10 % de revenus.
           </p>
         )}
       </div>
@@ -1115,12 +1146,12 @@ export default function HomePage() {
                   className="retro-button primary-button"
                   onClick={claimMineReward}
                 >
-                  Réclamer 2 €
+                  Réclamer {formatMoney(mineReward)}
                 </button>
               )}
 
               {mineRewardClaimed && (
-                <p>Récompense de 2 € ajoutée à votre trésorerie.</p>
+                <p>Récompense de {formatMoney(mineReward)} ajoutée à votre trésorerie.</p>
               )}
 
               <button className="retro-button" onClick={startMineGame}>
@@ -1130,7 +1161,7 @@ export default function HomePage() {
           )}
 
           <p className="hint-text">
-            Révélez toutes les cases sans mine pour gagner 2 €.
+            Révélez toutes les cases sans mine pour gagner {formatMoney(mineReward)}.
           </p>
         </>
       )}
